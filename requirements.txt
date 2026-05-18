@@ -11,7 +11,7 @@ openai>=2.32.0
 # and other tools still pull in. Direct usage in the compiler has migrated
 # to google-genai (see below).
 google-generativeai>=0.8.6
-google-genai>=1.73.0
+google-genai>=2.2.0
 litellm>=1.83.0
 tiktoken>=0.12.0
 

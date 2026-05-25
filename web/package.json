@@ -35,7 +35,7 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.7"
   },
   "overrides": {
     "flatted": ">=3.4.2",

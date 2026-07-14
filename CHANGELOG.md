@@ -8,6 +8,48 @@ For the prose narratives accompanying major releases, see
 [`docs/release-notes-v3.4.0.md`](docs/release-notes-v3.4.0.md) and
 the equivalents for prior versions when added.
 
+## v3.5.2 — 2026-07-14
+
+### Security
+
+- **Web dev/test toolchain upgraded, clearing all 14 open Dependabot alerts**
+  (1 critical, 4 high, 5 moderate, 4 low — every one in
+  `web/package-lock.json`; the Python requirements had none).
+  vitest/@vitest/ui `^3.2.4` → `^3.2.6` (resolved 3.2.7; the critical
+  GHSA-5xrq-8626-4rwp — arbitrary file read/execute while the Vitest UI
+  server listens), vite 8.0.13 → 8.1.4 and the vitest-nested vite line
+  7.3.3 → 7.3.6 (`server.fs.deny` bypass, launch-editor NTLMv2 hash
+  disclosure), undici 7.25.0 → 7.28.0 (six advisories, including SOCKS5
+  cross-origin request routing and a TLS-certificate-validation bypass),
+  esbuild 0.27.7 → 0.28.1, js-yaml 4.1.1 → 4.3.0, @babel/core 7.29.0 →
+  7.29.7. `npm audit` now reports 0 vulnerabilities. Runtime dependencies
+  were unaffected — every flagged package is build/test tooling.
+
+### Fixed
+
+- **`npm run lint` crashed with `TypeError: expand is not a function`.**
+  The security overrides in `web/package.json` set floors with no upper
+  bound, so the brace-expansion override (`>=1.1.13`) resolved to the 5.x
+  line, whose export shape minimatch v3 (CJS) cannot call. Every override
+  is now bounded to the major line it patches (e.g. `>=1.1.13 <2`);
+  minimatch v3 gets a nested brace-expansion 1.1.16 while minimatch v10
+  keeps the hoisted 5.x it actually wants.
+- **14 `react-hooks/set-state-in-effect` errors** (a rule enabled by
+  eslint-config-next 16 via eslint-plugin-react-hooks 7) that accumulated
+  invisibly while lint was crashing. All fixed with restructures rather
+  than suppressions: render-phase adjustments for prop-driven state
+  (ModelPicker ⌘K open signal and focus-index clamp, PolicyPanel workspace
+  seeding, SettingsPanel per-workspace resets, SkillsPanel expanded-row
+  reset), mount fetches inlined with cancellation guards (McpServersPanel,
+  PolicyPanel policies/check/audit feeds), loading indicators derived from
+  fetched-state keys instead of flags flipped synchronously inside effects
+  (SkillsPanel list, PolicyPanel cross-workspace check), dropdown-open
+  resets moved into the open event (ModelPicker), and
+  ShortcutsHelpOverlay's refresh-on-open effect deleted outright (the
+  registry subscription it duplicated already covers every change).
+  Verified by the web suite (24/24), a clean `next build`, and driving the
+  panels live in the browser.
+
 ## v3.5.1 — 2026-07-14
 
 ### Changed

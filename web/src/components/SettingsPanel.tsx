@@ -136,25 +136,45 @@ export function SettingsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reset per-workspace UI state the moment the workspace changes.
+  // Render-phase adjustment (react.dev "adjusting state when a prop changes").
+  const [prevWorkspace, setPrevWorkspace] = useState(workspace);
+  if (prevWorkspace !== workspace) {
+    setPrevWorkspace(workspace);
+    setKeyOverrides({});
+    setIndexStatus(null);
+  }
+
   // Load keys status when workspace changes
   useEffect(() => {
+    let cancelled = false;
     getKeysStatus(workspace)
-      .then(setKeysStatus)
-      .catch(() => setKeysStatus({}));
-
-    // Reset key overrides when workspace changes
-    setKeyOverrides({});
+      .then((status) => {
+        if (!cancelled) setKeysStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setKeysStatus({});
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [workspace]);
 
-  // Load index status when workspace changes
+  // Load index status when workspace changes (no workspace: the reset
+  // above already cleared it).
   useEffect(() => {
-    if (workspace) {
-      getIndexStatus(workspace)
-        .then(setIndexStatus)
-        .catch(() => setIndexStatus(null));
-    } else {
-      setIndexStatus(null);
-    }
+    if (!workspace) return;
+    let cancelled = false;
+    getIndexStatus(workspace)
+      .then((status) => {
+        if (!cancelled) setIndexStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setIndexStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [workspace]);
 
   // Get effective key source for a provider (considering overrides)

@@ -62,28 +62,45 @@ export function PolicyPanel({
   disabled,
 }: PolicyPanelProps) {
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
+  // Seed the multi-select with the active workspace (if any) so the panel
+  // renders something useful on first paint.
+  const [selected, setSelected] = useState<string[]>(
+    workspace ? [workspace] : [],
+  );
   const [policies, setPolicies] = useState<Record<string, WorkspacePolicy>>({});
   const [check, setCheck] = useState<CrossWorkspaceCheck | null>(null);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
-  const [loadingCheck, setLoadingCheck] = useState(false);
-  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [loadingAudit, setLoadingAudit] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Initial workspace list + seed the selection with the active workspace.
+  // The (selection, model) pair the current `check` answers for. The
+  // "refreshing" indicator derives from comparing it against the pair on
+  // screen — no loading flag needs to be set from inside an effect.
+  const [checkedKey, setCheckedKey] = useState('');
+  const wantKey = useMemo(
+    () => JSON.stringify([selected, model ?? null]),
+    [selected, model],
+  );
+  const loadingCheck = selected.length > 0 && checkedKey !== wantKey;
+
+  // Whenever the workspace prop changes (e.g., user picks one in the main
+  // settings dropdown), include it in the selection if it isn't already.
+  // Render-phase adjustment (react.dev "adjusting state when a prop changes").
+  const [prevWorkspace, setPrevWorkspace] = useState(workspace);
+  if (prevWorkspace !== workspace) {
+    setPrevWorkspace(workspace);
+    if (workspace && !selected.includes(workspace)) {
+      setSelected([workspace, ...selected]);
+    }
+  }
+
+  // Initial workspace list.
   useEffect(() => {
     let cancelled = false;
-    setLoadingWorkspaces(true);
     getWorkspaces()
       .then((list) => {
-        if (cancelled) return;
-        setWorkspaces(list);
-        // Seed the multi-select with the active workspace (if any) so the
-        // panel renders something useful on first paint.
-        if (workspace && selected.length === 0) {
-          setSelected([workspace]);
-        }
+        if (!cancelled) setWorkspaces(list);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -95,26 +112,14 @@ export function PolicyPanel({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Whenever the workspace prop changes (e.g., user picks one in the main
-  // settings dropdown), include it in the selection if it isn't already.
+  // Load per-workspace policies whenever the selection changes. An empty
+  // selection has nothing to fetch; toggleWorkspace clears the fetched
+  // state when it empties the selection.
   useEffect(() => {
-    if (workspace && !selected.includes(workspace)) {
-      setSelected((prev) => [workspace, ...prev]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspace]);
-
-  // Load per-workspace policies whenever the selection changes.
-  useEffect(() => {
+    if (selected.length === 0) return;
     let cancelled = false;
-    if (selected.length === 0) {
-      setPolicies({});
-      setCheck(null);
-      return;
-    }
     void (async () => {
       const next: Record<string, WorkspacePolicy> = {};
       for (const ws of selected) {
@@ -133,31 +138,34 @@ export function PolicyPanel({
   }, [selected]);
 
   // Cross-workspace boundary check + model-routing summary.
-  const runCheck = useCallback(async () => {
-    if (selected.length === 0) {
-      setCheck(null);
-      return;
-    }
-    setLoadingCheck(true);
-    setError(null);
-    try {
-      const result = await checkCrossWorkspace(selected, {
-        requestedModel: model,
-      });
-      setCheck(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Cross-workspace check failed');
-      setCheck(null);
-    } finally {
-      setLoadingCheck(false);
-    }
-  }, [selected, model]);
-
   useEffect(() => {
-    void runCheck();
-  }, [runCheck]);
+    if (selected.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await checkCrossWorkspace(selected, {
+          requestedModel: model,
+        });
+        if (!cancelled) {
+          setCheck(result);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Cross-workspace check failed');
+          setCheck(null);
+        }
+      } finally {
+        if (!cancelled) setCheckedKey(wantKey);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, model, wantKey]);
 
-  // Audit-log feed (last 100).
+  // Audit-log feed (last 100). The Refresh button reuses refreshAudit; the
+  // initial load runs inline so unmount cancels the state writes.
   const refreshAudit = useCallback(async () => {
     setLoadingAudit(true);
     try {
@@ -173,13 +181,36 @@ export function PolicyPanel({
   }, []);
 
   useEffect(() => {
-    void refreshAudit();
-  }, [refreshAudit]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await getAuditRecent(100);
+        if (!cancelled) setAuditEntries([...res.entries].reverse());
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Audit fetch failed');
+        }
+      } finally {
+        if (!cancelled) setLoadingAudit(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleWorkspace = (dir: string) => {
-    setSelected((prev) =>
-      prev.includes(dir) ? prev.filter((n) => n !== dir) : [...prev, dir],
-    );
+    const next = selected.includes(dir)
+      ? selected.filter((n) => n !== dir)
+      : [...selected, dir];
+    setSelected(next);
+    if (next.length === 0) {
+      // Event-driven counterpart of the fetch effects above, which skip
+      // empty selections instead of clearing state themselves.
+      setPolicies({});
+      setCheck(null);
+      setCheckedKey('');
+    }
   };
 
   const sortedAvailable = useMemo(

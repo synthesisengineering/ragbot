@@ -38,19 +38,15 @@ export function ShortcutsHelpOverlay({ open, onClose }: ShortcutsHelpOverlayProp
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  // Re-read the registry whenever it changes.
+  // Re-read the registry whenever it changes. The subscription is live from
+  // mount (even while the overlay is hidden), so the mirror is always
+  // current by the time the user presses ⌘? — no refresh-on-open needed.
   useEffect(() => {
     const unsubscribe = keyboardShortcuts.onChange(() => {
       setShortcuts(keyboardShortcuts.getAll());
     });
     return unsubscribe;
   }, []);
-
-  // Refresh once on open in case registrations happened between subscribe
-  // and the user pressing ⌘?.
-  useEffect(() => {
-    if (open) setShortcuts(keyboardShortcuts.getAll());
-  }, [open]);
 
   // Move focus into the overlay on open so screen readers announce it and
   // Tab navigation stays inside the dialog.

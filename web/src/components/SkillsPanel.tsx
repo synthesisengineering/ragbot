@@ -35,11 +35,15 @@ export function SkillsPanel({ workspace, disabled }: SkillsPanelProps) {
   type FilterMode = 'workspace' | 'all';
   const [filter, setFilter] = useState<FilterMode>('workspace');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, SkillDetail>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  // The workspace filter the current `skills` list answers for (null until
+  // the first fetch lands). List-loading state derives from comparing it
+  // against the filter on screen; manual refreshes track their own flag.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
   // Active workspace filter resolves to:
   //   - the supplied workspace name when filter === 'workspace' and one
@@ -52,8 +56,11 @@ export function SkillsPanel({ workspace, disabled }: SkillsPanelProps) {
     return workspace;
   }, [filter, workspace]);
 
+  const loading = manualRefreshing || loadedFor !== (activeWorkspace ?? '');
+
+  // Manual refresh for the 🔄 button.
   const refresh = useCallback(async () => {
-    setLoading(true);
+    setManualRefreshing(true);
     try {
       const data = await listSkills(activeWorkspace);
       setSkills(data);
@@ -61,19 +68,43 @@ export function SkillsPanel({ workspace, disabled }: SkillsPanelProps) {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load skills');
     } finally {
-      setLoading(false);
+      setManualRefreshing(false);
     }
   }, [activeWorkspace]);
 
+  // Fetch the list whenever the effective filter changes (including the
+  // initial mount). `loading` above derives from loadedFor, so nothing
+  // needs to flip a flag before the fetch starts.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await listSkills(activeWorkspace);
+        if (!cancelled) {
+          setSkills(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to load skills');
+        }
+      } finally {
+        if (!cancelled) setLoadedFor(activeWorkspace ?? '');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace]);
 
   // Reset the expanded state when the underlying list changes so the UI
   // does not show a stale body for a skill that fell out of view.
-  useEffect(() => {
+  // Render-phase adjustment (react.dev "adjusting state when a prop changes").
+  const [prevActiveWorkspace, setPrevActiveWorkspace] = useState(activeWorkspace);
+  if (prevActiveWorkspace !== activeWorkspace) {
+    setPrevActiveWorkspace(activeWorkspace);
     setExpanded(null);
-  }, [activeWorkspace]);
+  }
 
   const handleExpand = async (name: string) => {
     if (expanded === name) {

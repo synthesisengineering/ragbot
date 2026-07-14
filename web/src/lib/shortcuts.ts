@@ -232,7 +232,6 @@ export class ShortcutRegistry {
         listener();
       } catch (err) {
         // A bad listener must not break dispatch for others.
-        // eslint-disable-next-line no-console
         console.error('Shortcut registry change listener threw:', err);
       }
     }

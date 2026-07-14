@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   getModels,
   getProviders,
@@ -130,15 +130,21 @@ export function ModelPicker({ value, onChange, disabled, openSignal, onOpenChang
     onOpenChange?.(open);
   }, [open, onOpenChange]);
 
+  // Open the dropdown with a clean slate (query and keyboard focus reset
+  // belong to the open *event*, not to an effect watching `open`).
+  const openPicker = () => {
+    setQuery('');
+    setFocusedIndex(0);
+    setOpen(true);
+  };
+
   // External trigger (e.g., ⌘K): increment openSignal to request open.
-  const lastSignalRef = useRef<number | undefined>(openSignal);
-  useEffect(() => {
-    if (openSignal === undefined) return;
-    if (openSignal !== lastSignalRef.current) {
-      lastSignalRef.current = openSignal;
-      if (!disabled) setOpen(true);
-    }
-  }, [openSignal, disabled]);
+  // Render-phase adjustment (react.dev "adjusting state when a prop changes").
+  const [prevSignal, setPrevSignal] = useState(openSignal);
+  if (openSignal !== prevSignal) {
+    setPrevSignal(openSignal);
+    if (openSignal !== undefined && !disabled) openPicker();
+  }
 
   // Load all data once on mount.
   useEffect(() => {
@@ -167,13 +173,11 @@ export function ModelPicker({ value, onChange, disabled, openSignal, onOpenChang
   }, []);
 
   // Refresh recent/pinned when the dropdown opens (cheap, keeps state fresh
-  // after a chat has recorded a new entry).
+  // after a chat has recorded a new entry), and focus the search field.
   useEffect(() => {
     if (!open) return;
     getPinnedModels().then(setPinned).catch(() => {});
     getRecentModels().then(setRecent).catch(() => {});
-    setQuery('');
-    setFocusedIndex(0);
     // Focus search after the panel mounts.
     queueMicrotask(() => searchRef.current?.focus());
   }, [open]);
@@ -206,12 +210,11 @@ export function ModelPicker({ value, onChange, disabled, openSignal, onOpenChang
     return rows;
   }, [sections]);
 
-  // Keep focusedIndex in bounds as filtering changes the row count.
-  useEffect(() => {
-    if (focusedIndex >= flatRows.length && flatRows.length > 0) {
-      setFocusedIndex(flatRows.length - 1);
-    }
-  }, [flatRows.length, focusedIndex]);
+  // Keep focusedIndex in bounds as filtering changes the row count
+  // (render-phase adjustment; the setState restarts render immediately).
+  if (focusedIndex >= flatRows.length && flatRows.length > 0) {
+    setFocusedIndex(flatRows.length - 1);
+  }
 
   const selectedModel = useMemo(
     () => models.find((m) => m.id === value) ?? models.find((m) => m.id === defaultModelId),
@@ -287,7 +290,14 @@ export function ModelPicker({ value, onChange, disabled, openSignal, onOpenChang
       </label>
       <button
         type="button"
-        onClick={() => !disabled && setOpen((v) => !v)}
+        onClick={() => {
+          if (disabled) return;
+          if (open) {
+            setOpen(false);
+          } else {
+            openPicker();
+          }
+        }}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}

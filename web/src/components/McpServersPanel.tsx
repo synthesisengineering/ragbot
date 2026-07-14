@@ -47,9 +47,29 @@ export function McpServersPanel({ disabled }: { disabled?: boolean }) {
     }
   }, []);
 
+  // Initial load runs inline (not via refresh) so unmount cancels the state
+  // writes; refresh() serves the event handlers below.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await listMcpServers();
+        if (!cancelled) {
+          setServers(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to load MCP servers');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleToggle = async (id: string) => {
     setBusyId(id);

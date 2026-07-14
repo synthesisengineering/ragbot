@@ -47,7 +47,7 @@ class TestPinnedModelsEndpoint:
         assert r.json() == {"model_ids": []}
 
     def test_put_replaces_full_list(self, client):
-        body = {"model_ids": ["anthropic/claude-opus-4-7", "ollama_chat/gemma4:31b"]}
+        body = {"model_ids": ["anthropic/claude-opus-4-8", "ollama_chat/gemma4:31b"]}
         r = client.put("/api/preferences/pinned-models", json=body)
         assert r.status_code == 200
         assert r.json()["model_ids"] == body["model_ids"]
@@ -71,10 +71,10 @@ class TestRecentModelsEndpoint:
     def test_post_records_a_use(self, client):
         r = client.post(
             "/api/preferences/recent-models",
-            json={"model_id": "anthropic/claude-sonnet-4-6"},
+            json={"model_id": "anthropic/claude-sonnet-5"},
         )
         assert r.status_code == 200
-        assert r.json()["model_ids"] == ["anthropic/claude-sonnet-4-6"]
+        assert r.json()["model_ids"] == ["anthropic/claude-sonnet-5"]
 
     def test_post_moves_to_front_on_repeat(self, client):
         client.post("/api/preferences/recent-models", json={"model_id": "a"})

@@ -69,22 +69,27 @@ class TestBug2BudgetLoopContinuesPastOversizedChunks:
 
 
 class TestBug3AnthropicThinkingForcesTemperature:
-    def test_sonnet_4_6_with_explicit_effort_forces_temp_1(self, monkeypatch):
+    def test_pre_4_7_claude_with_explicit_effort_forces_temp_1(self, monkeypatch):
+        # Haiku 4.5 is the remaining pre-4.7 model: reasoning_effort path,
+        # temperature forced to 1 (extended thinking requires it).
         from ragbot.core import _resolve_thinking_for_model
         monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
         out = _resolve_thinking_for_model(
-            "anthropic/claude-sonnet-4-6",
+            "anthropic/claude-haiku-4-5-20251001",
             requested_effort="medium",
         )
         assert out["reasoning_effort"] == "medium"
         assert out["temperature"] == 1.0
 
-    def test_claude_4_7_with_default_forces_temp_1_via_adaptive_shape(self, monkeypatch):
+    def test_claude_4_8_plus_default_omits_temperature_with_adaptive_shape(self, monkeypatch):
+        # The 4.8+/5.x inverse of the original bug: the API now REJECTS the
+        # temperature parameter ("`temperature` is deprecated for this
+        # model", verified 2026-07-14), so the resolver must NOT send it.
         from ragbot.core import _resolve_thinking_for_model
         monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
-        out = _resolve_thinking_for_model("anthropic/claude-opus-4-7")
+        out = _resolve_thinking_for_model("anthropic/claude-fable-5")
         assert out["thinking"] == {"type": "adaptive"}
-        assert out["temperature"] == 1.0
+        assert "temperature" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -100,17 +105,17 @@ class TestBug4Claude47AdaptiveShape:
         from ragbot.core import _resolve_thinking_for_model
         monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
         out = _resolve_thinking_for_model(
-            "anthropic/claude-opus-4-7",
+            "anthropic/claude-opus-4-8",
             requested_effort="high",
         )
         assert "reasoning_effort" not in out
         assert out["thinking"] == {"type": "adaptive"}
 
-    def test_sonnet_4_6_still_uses_reasoning_effort(self, monkeypatch):
+    def test_pre_4_7_claude_still_uses_reasoning_effort(self, monkeypatch):
         from ragbot.core import _resolve_thinking_for_model
         monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
         out = _resolve_thinking_for_model(
-            "anthropic/claude-sonnet-4-6",
+            "anthropic/claude-haiku-4-5-20251001",
             requested_effort="high",
         )
         assert out["reasoning_effort"] == "high"

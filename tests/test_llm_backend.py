@@ -28,7 +28,7 @@ from synthesis_engine.llm import (  # noqa: E402
 
 class TestLLMRequest:
     def test_defaults_are_safe(self):
-        r = LLMRequest(model="anthropic/claude-sonnet-4-6", messages=[])
+        r = LLMRequest(model="anthropic/claude-sonnet-5", messages=[])
         assert r.temperature is None
         assert r.max_tokens == 4096
         assert r.api_key is None
@@ -106,7 +106,7 @@ class TestLiteLLMKwargsBuilder:
 
     def _build(self, **overrides):
         from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        req = LLMRequest(model="anthropic/claude-sonnet-4-6", messages=[{"role": "user", "content": "hi"}])
+        req = LLMRequest(model="anthropic/claude-sonnet-5", messages=[{"role": "user", "content": "hi"}])
         for k, v in overrides.items():
             setattr(req, k, v)
         return _build_completion_kwargs(req)
@@ -118,17 +118,25 @@ class TestLiteLLMKwargsBuilder:
 
     def test_max_completion_tokens_for_gpt5(self):
         from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        req = LLMRequest(model="openai/gpt-5.5", messages=[], max_tokens=512)
+        req = LLMRequest(model="openai/gpt-5.6-terra", messages=[], max_tokens=512)
         out = _build_completion_kwargs(req)
         assert out["max_completion_tokens"] == 512
         assert "max_tokens" not in out
 
-    def test_anthropic_with_reasoning_effort_forces_temperature_one(self):
-        out = self._build(reasoning_effort="medium")
+    def test_pre_4_7_anthropic_reasoning_effort_forces_temperature_one(self):
+        # Haiku 4.5 (pre-4.7) still routes through LiteLLM's reasoning_effort
+        # mapper, which requires temperature=1 on Anthropic.
+        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
+        req = LLMRequest(
+            model="anthropic/claude-haiku-4-5-20251001",
+            messages=[],
+            reasoning_effort="medium",
+        )
+        out = _build_completion_kwargs(req)
         assert out["reasoning_effort"] == "medium"
         assert out["temperature"] == 1.0
 
-    def test_claude_4_7_uses_adaptive_thinking_shape(self):
+    def test_claude_4_7_uses_adaptive_thinking_shape_with_temp(self):
         from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
         req = LLMRequest(
             model="anthropic/claude-opus-4-7",
@@ -136,15 +144,27 @@ class TestLiteLLMKwargsBuilder:
             reasoning_effort="high",
         )
         out = _build_completion_kwargs(req)
-        # 4.7+ skips reasoning_effort and sends adaptive thinking directly.
+        # 4.7 skips reasoning_effort, sends adaptive thinking + temp=1.
         assert out["thinking"] == {"type": "adaptive"}
         assert out["temperature"] == 1.0
         assert "reasoning_effort" not in out
 
+    def test_claude_4_8_and_5_x_adaptive_shape_without_temperature(self):
+        # Claude 4.8+/5.x rejects the temperature parameter entirely
+        # (400 "`temperature` is deprecated for this model").
+        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
+        for model in ("anthropic/claude-opus-4-8", "anthropic/claude-fable-5"):
+            req = LLMRequest(model=model, messages=[], reasoning_effort="high")
+            out = _build_completion_kwargs(req)
+            assert out["thinking"] == {"type": "adaptive"}
+            assert "temperature" not in out
+            assert "reasoning_effort" not in out
+
     def test_explicit_thinking_passes_through(self):
         out = self._build(thinking={"type": "adaptive", "budget_tokens": 8000})
         assert out["thinking"] == {"type": "adaptive", "budget_tokens": 8000}
-        assert out["temperature"] == 1.0  # anthropic forces temp=1
+        # Default model is Sonnet 5 (4.8+): temperature is never sent.
+        assert "temperature" not in out
 
     def test_gemini_reasoning_effort_does_not_force_temperature(self):
         from synthesis_engine.llm.litellm_backend import _build_completion_kwargs

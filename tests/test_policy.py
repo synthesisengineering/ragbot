@@ -194,21 +194,21 @@ class TestIsModelAllowed:
             allowed_models=("anthropic/claude-*",),
             denied_models=("anthropic/claude-opus-*-preview*",),
         )
-        check = is_model_allowed(policy, "anthropic/claude-opus-4-7-preview")
+        check = is_model_allowed(policy, "anthropic/claude-opus-4-8-preview")
         assert check.allowed is False
         assert "denied_models" in check.reason
 
     def test_allowed_models_honored(self):
         policy = RoutingPolicy(allowed_models=("openai/gpt-5*",))
-        check = is_model_allowed(policy, "openai/gpt-5.5-pro")
+        check = is_model_allowed(policy, "openai/gpt-5.6-sol")
         assert check.allowed is True
         assert "allowed_models" in check.reason
 
     def test_glob_matching_anthropic(self):
         policy = RoutingPolicy(allowed_models=("anthropic/claude-*",))
         for mid in (
-            "anthropic/claude-sonnet-4-6",
-            "anthropic/claude-opus-4-7",
+            "anthropic/claude-sonnet-5",
+            "anthropic/claude-opus-4-8",
             "anthropic/claude-haiku-4-5",
         ):
             check = is_model_allowed(policy, mid)
@@ -222,12 +222,12 @@ class TestIsModelAllowed:
 
     def test_empty_allowlist_allows_anything_not_denied(self):
         policy = RoutingPolicy()
-        check = is_model_allowed(policy, "anthropic/claude-opus-4-7")
+        check = is_model_allowed(policy, "anthropic/claude-opus-4-8")
         assert check.allowed is True
 
     def test_local_only_denies_non_local(self):
         policy = RoutingPolicy(local_only=True)
-        check = is_model_allowed(policy, "anthropic/claude-opus-4-7")
+        check = is_model_allowed(policy, "anthropic/claude-opus-4-8")
         assert check.allowed is False
         assert "local_only" in check.reason
 
@@ -516,7 +516,7 @@ class TestAuditLog:
             op_type="cross_workspace_synthesis",
             workspaces=["acme-news", "acme-user"],
             tools=["memory.read"],
-            model_id="anthropic/claude-opus-4-7",
+            model_id="anthropic/claude-opus-4-8",
             outcome="allowed",
             args_summary="{}",
         )
@@ -713,7 +713,7 @@ class TestAuditEntryShape:
             op_type="model_call",
             workspaces=["acme-news"],
             tools=["llm.complete"],
-            model_id="anthropic/claude-opus-4-7",
+            model_id="anthropic/claude-opus-4-8",
             outcome="denied",
             args_summary='{"prompt": "<redacted>"}',
             metadata={"effective_confidentiality": "CLIENT_CONFIDENTIAL"},

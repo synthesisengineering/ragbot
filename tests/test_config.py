@@ -302,8 +302,8 @@ class TestModelMetadata:
         models = get_all_models()
         flat = {m['id']: m for provider in models.values() for m in provider}
 
-        assert flat.get('anthropic/claude-opus-4-7', {}).get('display_name') == 'Claude Opus 4.7'
-        assert flat.get('openai/gpt-5.5', {}).get('display_name') == 'GPT-5.5'
+        assert flat.get('anthropic/claude-opus-4-8', {}).get('display_name') == 'Claude Opus 4.8'
+        assert flat.get('openai/gpt-5.6-terra', {}).get('display_name') == 'GPT-5.6 Terra'
         assert flat.get('ollama_chat/gemma4:31b', {}).get('display_name') == 'Gemma 4 31B'
 
     def test_supports_thinking_reflects_engines_yaml(self):
@@ -311,12 +311,12 @@ class TestModelMetadata:
         models = get_all_models()
         flat = {m['id']: m for provider in models.values() for m in provider}
 
-        # Claude Opus 4.7 has thinking.supported: true in engines.yaml.
-        assert flat.get('anthropic/claude-opus-4-7', {}).get('supports_thinking') is True
+        # Claude Opus 4.8 has thinking.supported: true in engines.yaml.
+        assert flat.get('anthropic/claude-opus-4-8', {}).get('supports_thinking') is True
         # Claude Haiku 4.5 does not have a thinking block.
-        assert flat.get('anthropic/claude-haiku-4-5-20251001', {}).get('supports_thinking') is False
+        assert flat.get('anthropic/claude-haiku-4-5-20251001', {}).get('supports_thinking') is True
         # GPT-5.4 mini does not have a thinking block.
-        assert flat.get('openai/gpt-5.4-mini', {}).get('supports_thinking') is False
+        assert flat.get('openai/gpt-5.6-luna', {}).get('supports_thinking') is False
 
     def test_is_local_is_true_only_for_ollama(self):
         """Only Ollama models are local; cloud-provider models are not."""

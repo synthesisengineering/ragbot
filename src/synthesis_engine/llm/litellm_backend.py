@@ -62,15 +62,11 @@ def _provider_for(model: str) -> str:
     return PROVIDER_UNKNOWN
 
 
-def _is_claude_4_7_or_newer(model: str) -> bool:
-    m = model.lower()
-    # Match opus-4-7, sonnet-4-7, haiku-4-7, and anything claude-x-y where x*10+y >= 47.
-    # Conservative: explicit substrings for the known-good 4.7 family.
-    return any(
-        marker in m for marker in (
-            "opus-4-7", "sonnet-4-7", "haiku-4-7", "claude-4-7",
-        )
-    )
+# Version-aware Claude generation predicates are shared across backends and
+# the chat core — see synthesis_engine.llm.base. (A hardcoded substring list
+# here silently regressed the moment engines.yaml moved past the 4.7 line.)
+from .base import claude_rejects_temperature as _claude_rejects_temperature
+from .base import is_claude_4_7_or_newer as _is_claude_4_7_or_newer
 
 
 def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
@@ -92,7 +88,10 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
         "messages": messages,
         "api_key": req.api_key,
     }
-    if req.temperature is not None:
+    if req.temperature is not None and not (
+        _is_anthropic_model(req.model) and _claude_rejects_temperature(req.model)
+    ):
+        # Claude 4.8+ / 5.x rejects the temperature parameter outright.
         kwargs["temperature"] = req.temperature
 
     # GPT-5.x uses max_completion_tokens, not max_tokens.
@@ -106,7 +105,7 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
     if req.thinking is not None:
         # Caller provided the provider-native shape; pass it through.
         kwargs["thinking"] = req.thinking
-        if _is_anthropic_model(req.model):
+        if _is_anthropic_model(req.model) and not _claude_rejects_temperature(req.model):
             kwargs["temperature"] = 1.0
     elif req.reasoning_effort:
         if _is_anthropic_model(req.model) and _is_claude_4_7_or_newer(req.model):
@@ -114,7 +113,10 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
             # shape via reasoning_effort. Claude 4.7+ rejects that — use
             # the new adaptive shape directly.
             kwargs["thinking"] = {"type": "adaptive"}
-            kwargs["temperature"] = 1.0
+            if not _claude_rejects_temperature(req.model):
+                # 4.7 requires temp=1 alongside thinking; 4.8+/5.x rejects
+                # the parameter entirely.
+                kwargs["temperature"] = 1.0
         else:
             kwargs["reasoning_effort"] = req.reasoning_effort
             if _is_anthropic_model(req.model):

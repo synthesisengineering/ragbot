@@ -1,8 +1,8 @@
 # engines.yaml — LLM engine configuration for Ragbot.
 #
-# Updated: April 2026 with the latest stable/preview models.
-# Older superseded models have been removed (no GPT-5.x earlier than 5.4,
-# no Claude 4.5, no Gemini 3 Pro Preview).
+# Updated: July 2026 with the latest stable/preview models.
+# Older superseded models have been removed (no GPT-5.x earlier than 5.6,
+# no Claude older than the current generation of each line).
 #
 # Field reference:
 #   display_name       — human-readable label shown in UIs (falls back to `name` if absent)
@@ -12,62 +12,71 @@
 #   thinking           — adaptive/extended thinking metadata (informational; chat code may
 #                        opt into it via LiteLLM `thinking` parameter)
 #
-# Sources (April 24, 2026):
-#   Anthropic:  https://docs.anthropic.com/en/docs/about-claude/models/overview
-#   OpenAI:     https://openai.com/api/pricing/
-#   Google:     https://ai.google.dev/gemini-api/docs/changelog
+# Tier-role mapping (frontier / efficient / light) lives OUTSIDE this file, in the
+# synthesis-model-tiers skill (synthesis-skills repo). This file is the capability
+# catalog; that file is the cross-tool role policy.
+#
+# Sources (July 14, 2026):
+#   Anthropic:  https://platform.claude.com/docs/en/docs/about-claude/models/overview
+#   OpenAI:     https://developers.openai.com/api/docs/models
+#   Google:     https://ai.google.dev/gemini-api/docs/changelog (as of April 24, 2026)
 
 engines:
   - name: openai
     api_key_name: OPENAI_API_KEY
     models:
-      # GPT-5.4 mini — high-volume, cost-effective tier
-      # Released March 17, 2026. Pricing: $0.75/$4.50 per MTok.
-      - name: gpt-5.4-mini
-        display_name: GPT-5.4 Mini
+      # GPT-5.6 Luna — cost-optimized, high-volume tier
+      # Pricing: $1/$6 per MTok. 1.05M context, 128K output.
+      # (No thinking block, matching the small-tier convention; verify reasoning
+      #  support against the API before enabling.)
+      - name: gpt-5.6-luna
+        display_name: GPT-5.6 Luna
         category: small
         supports_system_role: true
         max_temperature: 1
         temperature: 1.0
-        max_input_tokens: 400000
+        max_input_tokens: 1050000
         max_output_tokens: 128000
         default_max_tokens: 8192
-      # GPT-5.5 — current frontier general-purpose model
-      # Released April 23, 2026. Pricing: $5/$30 per MTok. 1M context.
-      - name: gpt-5.5
-        display_name: GPT-5.5
+      # GPT-5.6 Terra — balanced intelligence and cost
+      # Pricing: $2.50/$15 per MTok. 1.05M context, 128K output.
+      # Reasoning modes carried forward from the GPT-5.x line convention.
+      - name: gpt-5.6-terra
+        display_name: GPT-5.6 Terra
         category: medium
         supports_system_role: true
         max_temperature: 1
         temperature: 1.0
-        max_input_tokens: 1000000
+        max_input_tokens: 1050000
         max_output_tokens: 128000
         default_max_tokens: 8192
         thinking:
           supported: true
           modes: [minimal, low, medium, high]
-      # GPT-5.5 Pro — heaviest reasoning workloads
-      # Released April 23, 2026. Pricing: $30/$180 per MTok. 1M context.
-      - name: gpt-5.5-pro
-        display_name: GPT-5.5 Pro
+      # GPT-5.6 Sol — frontier model for complex professional work
+      # Pricing: $5/$30 per MTok. 1.05M context, 128K output.
+      # Reasoning modes carried forward from the GPT-5.x line convention.
+      - name: gpt-5.6-sol
+        display_name: GPT-5.6 Sol
         category: large
         is_flagship: true
         supports_system_role: true
         max_temperature: 1
         temperature: 1.0
-        max_input_tokens: 1000000
+        max_input_tokens: 1050000
         max_output_tokens: 128000
         default_max_tokens: 8192
         thinking:
           supported: true
           modes: [minimal, low, medium, high]
-    default_model: gpt-5.5
+    default_model: gpt-5.6-terra
 
   - name: anthropic
     api_key_name: ANTHROPIC_API_KEY
     models:
-      # Claude Haiku 4.5 — fast, cost-effective tier
-      # Released October 1, 2025.
+      # Claude Haiku 4.5 — fastest model with near-frontier intelligence
+      # Released October 1, 2025. Pricing: $1/$5 per MTok. 200k context, 64k output.
+      # Supports extended thinking (per July 2026 docs), not adaptive.
       - name: claude-haiku-4-5-20251001
         display_name: Claude Haiku 4.5
         category: small
@@ -77,26 +86,15 @@ engines:
         max_input_tokens: 200000
         max_output_tokens: 64000
         default_max_tokens: 8192
-      # Claude Sonnet 4.6 — balanced intelligence and speed
-      # Released February 17, 2026. 1M context, adaptive thinking.
-      - name: claude-sonnet-4-6
-        display_name: Claude Sonnet 4.6
-        category: medium
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 1000000
-        max_output_tokens: 64000
-        default_max_tokens: 8192
         thinking:
           supported: true
-          mode: adaptive
-      # Claude Opus 4.7 — most intelligent model, hardest agentic tasks
-      # Released April 16, 2026. 1M context, 128k output, adaptive thinking + task budgets.
-      - name: claude-opus-4-7
-        display_name: Claude Opus 4.7
-        category: large
-        is_flagship: true
+          mode: extended
+      # Claude Sonnet 5 — the best combination of speed and intelligence
+      # Pricing: $3/$15 per MTok (introductory $2/$10 through Aug 31, 2026).
+      # 1M context, 128k output, adaptive thinking. `effort` defaults to high on the API.
+      - name: claude-sonnet-5
+        display_name: Claude Sonnet 5
+        category: medium
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -106,8 +104,41 @@ engines:
         thinking:
           supported: true
           mode: adaptive
-          features: [task_budgets]
-    default_model: claude-sonnet-4-6
+      # Claude Opus 4.8 — complex agentic coding and enterprise work
+      # Pricing: $5/$25 per MTok. 1M context, 128k output, adaptive thinking.
+      # `effort` defaults to high on all surfaces. Kept alongside Fable 5 as the
+      # cost-conscious frontier fallback (see synthesis-model-tiers).
+      - name: claude-opus-4-8
+        display_name: Claude Opus 4.8
+        category: large
+        supports_system_role: true
+        max_temperature: 1
+        temperature: 0.75
+        max_input_tokens: 1000000
+        max_output_tokens: 128000
+        default_max_tokens: 8192
+        thinking:
+          supported: true
+          mode: adaptive
+      # Claude Fable 5 — Anthropic's most capable widely released model
+      # (Mythos-class tier above Opus; GA June 9, 2026.) Pricing: $10/$50 per MTok.
+      # 1M context, 128k output. Adaptive thinking is ALWAYS ON (cannot be disabled),
+      # hence temperature 1.0 (thinking requires temp=1; backends normalize).
+      - name: claude-fable-5
+        display_name: Claude Fable 5
+        category: large
+        is_flagship: true
+        supports_system_role: true
+        max_temperature: 1
+        temperature: 1.0
+        max_input_tokens: 1000000
+        max_output_tokens: 128000
+        default_max_tokens: 8192
+        thinking:
+          supported: true
+          mode: adaptive
+          always_on: true
+    default_model: claude-sonnet-5
 
   - name: google
     api_key_name: GOOGLE_API_KEY

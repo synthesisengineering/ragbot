@@ -8,6 +8,36 @@ For the prose narratives accompanying major releases, see
 [`docs/release-notes-v3.4.0.md`](docs/release-notes-v3.4.0.md) and
 the equivalents for prior versions when added.
 
+## v3.5.1 — 2026-07-14
+
+### Changed
+
+- **engines.yaml refreshed to the July 2026 model lines** (verified against the
+  providers' live docs and APIs the same day). OpenAI: GPT-5.6 Sol / Terra /
+  Luna replace the GPT-5.4/5.5 line (default: `gpt-5.6-terra`). Anthropic:
+  Claude Fable 5 (new flagship), Claude Opus 4.8, and Claude Sonnet 5 replace
+  Opus 4.7 / Sonnet 4.6 (default: `claude-sonnet-5`); Claude Haiku 4.5 stays
+  and now correctly advertises its extended-thinking support.
+
+### Fixed
+
+- **Claude 4.8+/5.x `temperature` rejection.** The Anthropic API now returns
+  400 "`temperature` is deprecated for this model" for the new generation.
+  Both LLM backends and the thinking resolver stop sending `temperature` for
+  Claude ≥ 4.8 (including the thinking paths); Claude 4.7 keeps the
+  adaptive-shape + temperature=1 behavior, and pre-4.7 models keep the
+  reasoning_effort + temperature=1 path.
+- **Version-aware Claude generation detection.** The "Claude 4.7 or newer"
+  checks in `ragbot.core` and both `synthesis_engine.llm` backends were
+  hardcoded substring lists (`opus-4-7`, `sonnet-4-7`, ...) that silently
+  stopped matching the moment engines.yaml moved past the 4.7 line — Fable 5
+  / Opus 4.8 / Sonnet 5 would have been routed through LiteLLM's
+  `reasoning_effort` mapper, which the API rejects for 4.7+. Replaced with a
+  shared, version-parsing predicate in `synthesis_engine.llm.base`.
+- **Test output no longer dumps request kwargs on HTTP failures**
+  (`pytest.ini` with `--tb=short`): a full traceback through LiteLLM's HTTP
+  handler printed live credential kwargs into test logs.
+
 ## v3.5.0 — 2026-05-15
 
 Substrate cleanup. Pgvector is the only vector backend, the agent loop

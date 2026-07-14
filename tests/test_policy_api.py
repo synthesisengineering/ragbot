@@ -307,14 +307,14 @@ class TestCrossWorkspaceCheck:
             "/api/policy/cross-workspace-check",
             params={
                 "workspaces": "acme-user,client-conf-ws",
-                "requested_model": "openai/gpt-5.5",
+                "requested_model": "openai/gpt-5.6-terra",
             },
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert "model_routing" in body
         mr = body["model_routing"]
-        assert mr["requested_model"] == "openai/gpt-5.5"
+        assert mr["requested_model"] == "openai/gpt-5.6-terra"
         assert mr["aggregate_allowed"] is False
         assert mr["denying_workspace_count"] == 1
         verdicts = {v["workspace"]: v for v in mr["verdicts"]}
@@ -344,7 +344,7 @@ class TestAuditRecent:
                     op_type="cross_workspace_run_start",
                     workspaces=["acme-news", "acme-user"],
                     tools=[],
-                    model_id="anthropic/claude-opus-4-7",
+                    model_id="anthropic/claude-opus-4-8",
                     outcome="allowed",
                     metadata={"i": i},
                 )

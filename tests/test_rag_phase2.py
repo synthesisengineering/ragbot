@@ -41,8 +41,8 @@ class TestGetFastModel:
 
     def test_get_fast_model_for_openai(self):
         """Fast model for OpenAI should be the small-category model from engines.yaml."""
-        fast = _get_fast_model('openai/gpt-5.5')
-        assert fast == 'openai/gpt-5.4-mini'
+        fast = _get_fast_model('openai/gpt-5.6-terra')
+        assert fast == 'openai/gpt-5.6-luna'
 
     def test_get_fast_model_for_google(self):
         """Fast model for Google should be the small-category Gemini Flash Lite."""
@@ -331,8 +331,8 @@ class TestProviderAgnosticIntegration:
     def test_different_providers_use_their_fast_models(self):
         """Each provider should use its own fast model, not hardcoded Haiku."""
         # Test that we're not hardcoding "haiku" but using categories
-        fast_anthropic = _get_fast_model('anthropic/claude-sonnet-4-6')
-        fast_openai = _get_fast_model('openai/gpt-5.5')
+        fast_anthropic = _get_fast_model('anthropic/claude-sonnet-5')
+        fast_openai = _get_fast_model('openai/gpt-5.6-terra')
         fast_google = _get_fast_model('gemini/gemini-3.1-pro-preview')
 
         # Each should be different (different providers)
@@ -355,8 +355,8 @@ class TestProviderAgnosticIntegration:
         google_small = get_model_by_category('google', 'small')
 
         # These should match _get_fast_model results
-        assert anthropic_small == _get_fast_model('anthropic/claude-opus-4-7')
-        assert openai_small == _get_fast_model('openai/gpt-5.5')
+        assert anthropic_small == _get_fast_model('anthropic/claude-opus-4-8')
+        assert openai_small == _get_fast_model('openai/gpt-5.6-terra')
         assert google_small == _get_fast_model('gemini/gemini-3.1-pro-preview')
 
 

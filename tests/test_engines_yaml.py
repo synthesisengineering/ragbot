@@ -73,6 +73,7 @@ VALID_THINKING_MODES = {
     "hybrid",
     "thinking",
     "instruct",
+    "extended",
 }
 
 

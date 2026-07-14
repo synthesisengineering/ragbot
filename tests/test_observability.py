@@ -82,7 +82,7 @@ def test_chat_completion_span_emits_gen_ai_attributes(in_memory_tracer):
         record_llm_response,
     )
 
-    model = "anthropic/claude-opus-4-7"
+    model = "anthropic/claude-opus-4-8"
     provider = "anthropic"
 
     with chat_completion_span(
@@ -212,7 +212,7 @@ def test_cache_control_applied_for_anthropic_model_only():
     ]
 
     # ---- Anthropic path ---------------------------------------------------
-    anthropic_model = "anthropic/claude-opus-4-7"
+    anthropic_model = "anthropic/claude-opus-4-8"
     assert is_anthropic_model(anthropic_model)
     assert is_eligible_for_cache(anthropic_model, cfg)
 
@@ -234,7 +234,7 @@ def test_cache_control_applied_for_anthropic_model_only():
     assert first_block["cache_control"].get("type") == "ephemeral"
 
     # ---- Non-Anthropic path -----------------------------------------------
-    gpt_model = "openai/gpt-5.5"
+    gpt_model = "openai/gpt-5.6-terra"
     assert not is_anthropic_model(gpt_model)
     assert not is_eligible_for_cache(gpt_model, cfg)
     # The eligibility check is the gate the LiteLLM backend uses; when
@@ -263,7 +263,7 @@ def test_prometheus_metrics_endpoint_returns_valid_exposition(in_memory_tracer):
     # Emit at least one LLM-instrument record so the Prometheus registry
     # has a non-empty observation series.
     with chat_completion_span(
-        model="anthropic/claude-opus-4-7",
+        model="anthropic/claude-opus-4-8",
         provider="anthropic",
         max_tokens=128,
     ) as span:
@@ -321,7 +321,7 @@ def test_cache_stats_endpoint_returns_documented_shape(in_memory_tracer):
     )
 
     with chat_completion_span(
-        model="anthropic/claude-opus-4-7",
+        model="anthropic/claude-opus-4-8",
         provider="anthropic",
         max_tokens=64,
     ) as span:

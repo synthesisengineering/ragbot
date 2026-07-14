@@ -105,8 +105,20 @@ def _resolve_thinking_for_model(
     # 4.7+. Bypass the mapper and pass the canonical adaptive shape
     # directly. Older Claude (4.5, 4.6) and non-Anthropic providers continue
     # to use reasoning_effort, which LiteLLM maps appropriately.
-    if is_anthropic and ("claude-4-7" in model_lower or "opus-4-7" in model_lower
-                         or "sonnet-4-7" in model_lower or "haiku-4-7" in model_lower):
+    #
+    # The check is version-aware rather than a substring list: every Claude
+    # generation at or beyond 4.7 (Opus 4.8, Sonnet 5, Fable 5, Mythos 5, ...)
+    # uses the adaptive shape. A hardcoded id list here silently regressed the
+    # moment engines.yaml moved past the 4.7 line.
+    from synthesis_engine.llm.base import (
+        claude_rejects_temperature,
+        is_claude_4_7_or_newer,
+    )
+
+    if is_anthropic and is_claude_4_7_or_newer(model_lower):
+        if claude_rejects_temperature(model_lower):
+            # 4.8+ / 5.x: adaptive shape only — the API rejects temperature.
+            return {"thinking": {"type": "adaptive"}}
         return {"thinking": {"type": "adaptive"}, "temperature": 1.0}
 
     out: Dict[str, Any] = {"reasoning_effort": effort}

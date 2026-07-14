@@ -76,13 +76,9 @@ def _strip_provider(model: str) -> str:
     return model
 
 
-def _is_claude_4_7_or_newer(model: str) -> bool:
-    m = model.lower()
-    return any(
-        marker in m for marker in (
-            "opus-4-7", "sonnet-4-7", "haiku-4-7", "claude-4-7",
-        )
-    )
+# Shared, version-aware predicates — see synthesis_engine.llm.base.
+from .base import claude_rejects_temperature as _claude_rejects_temperature
+from .base import is_claude_4_7_or_newer as _is_claude_4_7_or_newer
 
 
 # ---------------------------------------------------------------------------
@@ -232,8 +228,9 @@ class DirectBackend(LLMBackend):
 
         if thinking is not None:
             kwargs["thinking"] = thinking
-            kwargs["temperature"] = 1.0
-        elif request.temperature is not None:
+            if not _claude_rejects_temperature(request.model):
+                kwargs["temperature"] = 1.0
+        elif request.temperature is not None and not _claude_rejects_temperature(request.model):
             kwargs["temperature"] = request.temperature
 
         # Strip substrate-internal config keys from the passthrough.

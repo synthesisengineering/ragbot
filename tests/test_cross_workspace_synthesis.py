@@ -548,7 +548,7 @@ class TestDriverHappyPath:
                 },
                 retriever=retriever,
                 audit_writer=audit,
-                model_id="anthropic/claude-opus-4-7",
+                model_id="anthropic/claude-opus-4-8",
             )
         )
 
@@ -564,7 +564,7 @@ class TestDriverHappyPath:
         assert "three_tier_retrieve_multi" in joined
         assert "llm.complete" in joined
         assert "Model id" in joined
-        assert "anthropic/claude-opus-4-7" in joined
+        assert "anthropic/claude-opus-4-8" in joined
         assert "Per-workspace block counts" in joined
 
     def test_audit_entry_recorded_on_success(self) -> None:

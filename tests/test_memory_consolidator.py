@@ -460,7 +460,7 @@ def test_different_model_accumulates_provenance(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-opus-4-7",
+            model_id="anthropic/claude-opus-4-8",
             workspace="acme-news",
         )
     )
@@ -479,7 +479,7 @@ def test_different_model_accumulates_provenance(
         s for s in sources if "model=anthropic/claude-haiku-4-5" in s
     ]
     opus_runs = [
-        s for s in sources if "model=anthropic/claude-opus-4-7" in s
+        s for s in sources if "model=anthropic/claude-opus-4-8" in s
     ]
     assert haiku_runs, "expected Haiku pass to be recorded"
     assert opus_runs, "expected Opus pass to be recorded"
@@ -978,7 +978,7 @@ def test_read_consolidation_history_filters(
             op_type="cross_workspace_synthesis",
             workspaces=["acme-news", "acme-user"],
             tools=["search"],
-            model_id="anthropic/claude-opus-4-7",
+            model_id="anthropic/claude-opus-4-8",
             outcome="allowed",
         )
     )
@@ -987,7 +987,7 @@ def test_read_consolidation_history_filters(
             op_type="tool_call",
             workspaces=["acme-news"],
             tools=["web_search"],
-            model_id="anthropic/claude-opus-4-7",
+            model_id="anthropic/claude-opus-4-8",
             outcome="allowed",
         )
     )

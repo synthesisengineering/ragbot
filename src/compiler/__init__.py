@@ -756,14 +756,14 @@ def compile_project(config: dict,
     for target in targets:
         target_name = target.get('name', 'unknown')
         platform = target.get('platform', 'anthropic')
-        model_category = target.get('model_category', 'flagship')
+        model_tier = target.get('model_tier', 'flagship')
 
         if verbose:
             print(f"Compiling instructions for: {platform}")
 
         # Resolve model
         try:
-            model = resolve_model(engines_config, platform, model_category)
+            model = resolve_model(engines_config, platform, model_tier)
         except ValueError:
             model = None
             result['errors'].append(f"Could not resolve model for {platform}")

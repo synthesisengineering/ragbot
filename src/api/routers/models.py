@@ -80,7 +80,7 @@ async def list_all_models():
                 "supports_streaming": model.get("supports_streaming", True),
                 "supports_system_role": model.get("supports_system_role", True),
                 "available": api_keys.get(provider, False),
-                "category": model.get("category", "medium"),
+                "tier": model.get("tier", "routine"),
                 "max_output_tokens": model.get("max_output_tokens"),
                 "temperature": model.get("temperature"),
                 "max_temperature": model.get("max_temperature", 2),

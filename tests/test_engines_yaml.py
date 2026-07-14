@@ -28,18 +28,18 @@ if SRC_DIR not in sys.path:
 
 
 # Models added in the Ragbot v3.4 open-weights expansion. Each entry is
-# ``(model_name, provider, expected_category, expected_min_context_window)``.
+# ``(model_name, provider, expected_tier, expected_min_context_window)``.
 # These are the load-bearing schema invariants — if any one of these
 # entries disappears from engines.yaml, a v3.4 release is incomplete.
 V3_4_LOCAL_MODELS: List[tuple] = [
-    ("llama4:scout", "ollama", "medium", 1_000_000),
-    ("llama4:maverick", "ollama", "large", 1_000_000),
-    ("qwen3.6:27b", "ollama", "medium", 200_000),
-    ("qwen3.6:35b-a3b", "ollama", "large", 200_000),
-    ("deepseek-v3.2:671b", "ollama", "large", 128_000),
-    ("mistral-large-3:675b", "ollama", "large", 200_000),
-    ("mistral-medium-3.5:128b", "ollama", "large", 200_000),
-    ("mistral-small-4:119b", "ollama", "medium", 200_000),
+    ("llama4:scout", "ollama", "routine", 1_000_000),
+    ("llama4:maverick", "ollama", "judgment", 1_000_000),
+    ("qwen3.6:27b", "ollama", "routine", 200_000),
+    ("qwen3.6:35b-a3b", "ollama", "judgment", 200_000),
+    ("deepseek-v3.2:671b", "ollama", "judgment", 128_000),
+    ("mistral-large-3:675b", "ollama", "judgment", 200_000),
+    ("mistral-medium-3.5:128b", "ollama", "judgment", 200_000),
+    ("mistral-small-4:119b", "ollama", "routine", 200_000),
 ]
 
 
@@ -60,6 +60,13 @@ LOCAL_INFERENCE_REQUIRED_FIELDS = {
     "ollama_tag",
     "llama_cpp_quants",
 }
+
+
+# Valid tier values. Shared vocabulary with the synthesis-model-tiers
+# skill's tiers.yaml (judgment / routine / bulk — labels name the work,
+# not the artifact) — one vocabulary, two files, enforced by
+# TestTierRoleConsistency below.
+VALID_TIERS = {"judgment", "routine", "bulk"}
 
 
 # Valid thinking-mode values, used to validate `thinking.modes` and
@@ -148,25 +155,25 @@ class TestV34LocalModelEntries:
     """Each v3.4-added open-weights model is present with the required schema."""
 
     @pytest.mark.parametrize(
-        "model_name,provider,expected_category,expected_min_context",
+        "model_name,provider,expected_tier,expected_min_context",
         V3_4_LOCAL_MODELS,
     )
     def test_v34_model_present(
         self,
         model_name: str,
         provider: str,
-        expected_category: str,
+        expected_tier: str,
         expected_min_context: int,
     ):
-        """Model is registered under its provider with the expected category."""
+        """Model is registered under its provider with the expected tier."""
         config = _load_yaml()
         provider_block = _find_provider(config, provider)
         model = _find_model(provider_block, model_name)
 
-        # Category drives the picker badge (small / medium / large).
-        assert model.get("category") == expected_category, (
-            f"{model_name}: category should be {expected_category!r}, "
-            f"got {model.get('category')!r}"
+        # Tier drives the picker badge (bulk / routine / judgment).
+        assert model.get("tier") == expected_tier, (
+            f"{model_name}: tier should be {expected_tier!r}, "
+            f"got {model.get('tier')!r}"
         )
 
         # Context window must be at least the documented minimum.
@@ -350,6 +357,128 @@ class TestEnginesYamlIntegrity:
             f"Expected ollama provider to have ≥11 models post-v3.4, "
             f"got {len(ollama['models'])}"
         )
+
+
+def _find_tiers_yaml() -> str:
+    """Locate the synthesis-model-tiers tiers.yaml, or return ''.
+
+    Search order: SYNTHESIS_TIERS_FILE env override, then the standard
+    skill-install locations. Returns '' when not found so the consistency
+    tests skip on machines (and public CI) without the skill installed.
+    """
+    env_path = os.environ.get("SYNTHESIS_TIERS_FILE")
+    if env_path and os.path.exists(env_path):
+        return env_path
+    candidates = [
+        os.path.expanduser("~/.synthesis/skills/synthesis-model-tiers/tiers.yaml"),
+        os.path.expanduser("~/.claude/skills/synthesis-model-tiers/tiers.yaml"),
+        os.path.expanduser("~/.agents/skills/synthesis-model-tiers/tiers.yaml"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return ""
+
+
+class TestTierVocabulary:
+    """Every model declares a tier from the shared role vocabulary."""
+
+    def test_every_model_has_valid_tier(self):
+        """Each model's tier is one of frontier / efficient / light."""
+        config = _load_yaml()
+        for engine in config["engines"]:
+            for model in engine["models"]:
+                tier = model.get("tier")
+                assert tier in VALID_TIERS, (
+                    f"{engine['name']}/{model['name']}: tier must be one of "
+                    f"{sorted(VALID_TIERS)}, got {tier!r}"
+                )
+
+    def test_no_legacy_category_field(self):
+        """The pre-v3.6 `category` field must not reappear."""
+        config = _load_yaml()
+        for engine in config["engines"]:
+            for model in engine["models"]:
+                assert "category" not in model, (
+                    f"{engine['name']}/{model['name']}: legacy `category` "
+                    f"field present — use `tier` (judgment/routine/bulk)"
+                )
+
+
+class TestTierRoleConsistency:
+    """engines.yaml and synthesis-model-tiers tiers.yaml must agree.
+
+    tiers.yaml is the cross-provider ordered-preference table (which model
+    plays which role); engines.yaml is the capability catalog. Both use the
+    same tier vocabulary. These tests fail loudly when the two drift:
+    a model named in tiers.yaml that is missing from engines.yaml, or
+    listed under a different role than its catalog tier.
+
+    The catalog may carry MORE models than the role lists bless (e.g.,
+    Mac-Studio-class local models kept for bigger hardware) — that
+    direction is allowed. The reverse is not.
+    """
+
+    @pytest.fixture(scope="class")
+    def tiers_config(self):
+        path = _find_tiers_yaml()
+        if not path:
+            pytest.skip(
+                "synthesis-model-tiers tiers.yaml not installed "
+                "(set SYNTHESIS_TIERS_FILE to override)"
+            )
+        with open(path, "r") as f:
+            data = yaml.safe_load(f)
+        assert data and "providers" in data, f"{path}: malformed tiers.yaml"
+        return data
+
+    def test_every_engine_provider_covered(self, tiers_config):
+        """Each engines.yaml provider has a role block in tiers.yaml."""
+        config = _load_yaml()
+        tier_providers = set(tiers_config["providers"].keys())
+        for engine in config["engines"]:
+            assert engine["name"] in tier_providers, (
+                f"Provider {engine['name']!r} configured in engines.yaml "
+                f"but has no block in tiers.yaml — add its role lists"
+            )
+
+    def test_role_list_models_exist_with_matching_tier(self, tiers_config):
+        """Every model in a tiers.yaml role list exists in engines.yaml
+        under that provider, with `tier` equal to the role it is listed
+        under."""
+        config = _load_yaml()
+        engines_by_name = {e["name"]: e for e in config["engines"]}
+
+        for provider, roles in tiers_config["providers"].items():
+            engine = engines_by_name.get(provider)
+            if engine is None:
+                # tiers.yaml may cover providers this product doesn't
+                # configure; nothing to cross-check for those.
+                continue
+            catalog = {m["name"]: m for m in engine["models"]}
+            for role in sorted(VALID_TIERS):
+                for model_name in roles.get(role, []) or []:
+                    assert model_name in catalog, (
+                        f"tiers.yaml {provider}.{role} lists "
+                        f"{model_name!r}, which is not in engines.yaml — "
+                        f"the two files must be updated together"
+                    )
+                    actual = catalog[model_name].get("tier")
+                    assert actual == role, (
+                        f"{provider}/{model_name}: tiers.yaml lists it "
+                        f"under {role!r} but engines.yaml says tier="
+                        f"{actual!r}"
+                    )
+
+    def test_role_lists_nonempty_for_cloud_providers(self, tiers_config):
+        """Each provider block in tiers.yaml fills all three roles."""
+        for provider, roles in tiers_config["providers"].items():
+            for role in sorted(VALID_TIERS):
+                models = roles.get(role)
+                assert models, (
+                    f"tiers.yaml {provider}: role {role!r} is empty or "
+                    f"missing — every provider block fills all three roles"
+                )
 
 
 class TestEnginesLoaderIntegration:

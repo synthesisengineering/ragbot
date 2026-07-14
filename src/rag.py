@@ -10,10 +10,10 @@
 # - Enhanced filename/title matching
 #
 # Phase 2 Improvements (December 2025):
-# - Query Planner stage using provider's fast model (category="small")
+# - Query Planner stage using provider's fast model (tier="bulk")
 # - Multi-query expansion (5-7 variations for better recall)
 # - HyDE (Hypothetical Document Embeddings)
-# - Provider-agnostic model selection via engines.yaml categories
+# - Provider-agnostic model selection via engines.yaml tiers
 #
 # Phase 3 Improvements (December 2025):
 # - BM25/keyword search alongside vector search (hybrid retrieval)
@@ -799,11 +799,11 @@ def hybrid_search(
 def _get_fast_model(user_model: Optional[str] = None) -> Optional[str]:
     """Get the fast model for the same provider as the user's model.
 
-    Uses the 'small' category from engines.yaml to get the fastest
+    Uses the 'bulk' tier from engines.yaml to get the fastest
     model from the same provider, ensuring consistent API key usage.
 
     Args:
-        user_model: User's selected model ID (e.g., 'anthropic/claude-opus-4-5-20251101')
+        user_model: User's selected model ID (e.g., 'anthropic/claude-fable-5')
 
     Returns:
         Fast model ID for the same provider, or None if not found
@@ -831,7 +831,7 @@ def _get_fast_model(user_model: Optional[str] = None) -> Optional[str]:
 
 def _call_fast_llm(prompt: str, user_model: Optional[str] = None,
                    workspace: Optional[str] = None) -> Optional[str]:
-    """Call the fast LLM (small category) for auxiliary operations.
+    """Call the fast LLM (bulk tier) for auxiliary operations.
 
     Uses the same provider as the user's model to ensure consistent
     API key usage and billing. Falls back gracefully if unavailable.

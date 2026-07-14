@@ -172,7 +172,7 @@ Adding a new backend (e.g., Bifrost, Portkey, OpenRouter) is a single file imple
 
 ### Reasoning / Thinking Modes
 
-Models that advertise thinking support in `engines.yaml` (Claude Sonnet 4.6, Claude Opus 4.7, GPT-5.5, GPT-5.5-pro, Gemini 3 Flash / 3.1 Pro / 3.1 Flash Lite) are wired through LiteLLM's `reasoning_effort` parameter. LiteLLM normalises that into the provider-native shape (e.g., `thinking={"type": "adaptive"}` for Claude 4.x).
+Models that advertise thinking support in `engines.yaml` (Claude Fable 5 / Opus 4.8 / Sonnet 5 / Haiku 4.5, GPT-5.6 Sol/Terra, Gemini 3 Flash / 3.1 Pro / 3.1 Flash Lite) are wired through LiteLLM's `reasoning_effort` parameter. LiteLLM normalises that into the provider-native shape (e.g., `thinking={"type": "adaptive"}` for Claude 4.7+; Claude 4.8+/5.x additionally reject the `temperature` parameter — see `synthesis_engine/llm/base.py`).
 
 Default policy:
 
@@ -215,7 +215,10 @@ All model/provider configuration comes from `engines.yaml`. Use these functions:
 - `get_providers()` - Get list of provider names
 - `get_all_models()` - Get all models with full info
 - `get_default_model()` - Get the default model ID
+- `get_model_by_tier(provider, tier)` - Resolve a tier (judgment/routine/bulk) to a model ID
 - `get_temperature_settings()` - Get temperature presets
+
+Every model declares `tier: judgment | routine | bulk` — the labels name the work, shared with the synthesis-model-tiers skill's tiers.yaml and enforced by `tests/test_engines_yaml.py` (see the skill's `references/naming-rationale.md` for why these words).
 
 **NEVER hardcode model names, provider names, or defaults in code.**
 

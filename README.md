@@ -308,10 +308,19 @@ Discovery sources (later wins on name collision):
 
 When the `skills` workspace has indexed content, `ragbot chat` automatically merges its results with the user's selected workspace via cross-workspace retrieval. Disable per-call with `--no-skills` or programmatically via `additional_workspaces=[]`.
 
+Model Tiers
+-----------
+
+Every model in `engines.yaml` declares a `tier` — **judgment**, **routine**, or **bulk**. The labels name the work a model is trusted with, not the artifact: judgment-tier models handle work where being wrong is expensive; routine-tier models are the balanced default for rule-following execution; bulk-tier models take high-volume, low-stakes operations (Ragbot's RAG pipeline uses the same provider's bulk-tier model for query planning and other auxiliary calls). A fourth selector, `flagship` (`is_flagship: true`), marks each provider's showcase model and drives default thinking effort — distinct from tier, since a provider can have several flagship-class local models and a judgment-tier model that isn't its flagship.
+
+The vocabulary is shared with the [synthesis-model-tiers skill](https://github.com/synthesisengineering/synthesis-skills/tree/main/synthesis-model-tiers), whose `tiers.yaml` holds the cross-provider ordered-preference table; `tests/test_engines_yaml.py` enforces that the two files agree wherever the skill is installed. The words are deliberately chosen from outside vendor marketing vocabulary — the industry applies "frontier" to entire model generations, so work-based labels are the ones no vendor can collide with. Full naming rationale: the skill's `references/naming-rationale.md`.
+
+Compiler targets in `compile-config.yaml` select models the same way, via `model_tier: flagship | judgment | routine | bulk`.
+
 Reasoning / Thinking Modes
 --------------------------
 
-Models that advertise thinking support in `engines.yaml` (Claude Sonnet 4.6, Claude Opus 4.7, GPT-5.5, GPT-5.5-pro, Gemini 3.x) are wired through LiteLLM's `reasoning_effort` parameter. Defaults: flagship models → `medium`, non-flagship with thinking → `off`, models without thinking metadata → silent (no params sent).
+Models that advertise thinking support in `engines.yaml` (Claude Fable 5 / Opus 4.8 / Sonnet 5 / Haiku 4.5, GPT-5.6 Sol/Terra, Gemini 3.x) are wired through LiteLLM's `reasoning_effort` parameter. Defaults: flagship models → `medium`, non-flagship with thinking → `off`, models without thinking metadata → silent (no params sent).
 
 ```bash
 ragbot chat --thinking-effort high -p "explain this..."          # explicit high effort

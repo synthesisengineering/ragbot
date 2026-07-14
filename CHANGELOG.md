@@ -8,6 +8,44 @@ For the prose narratives accompanying major releases, see
 [`docs/release-notes-v3.4.0.md`](docs/release-notes-v3.4.0.md) and
 the equivalents for prior versions when added.
 
+## v3.6.0 — 2026-07-14
+
+### Changed
+
+- **One tier vocabulary everywhere: `category: small|medium|large` →
+  `tier: judgment|routine|bulk`.** engines.yaml, the loader
+  (`get_all_models`, `get_model_by_tier` — formerly
+  `get_model_by_category`), the `/api/models` responses, the web model
+  picker (badges and search now keyed on `tier`), the compiler
+  (`resolve_model` tiers, `compile-config.yaml` targets take `model_tier`;
+  `flagship` remains the is_flagship-based selector, distinct from the
+  judgment tier), and every test. The words are identical to the
+  synthesis-model-tiers skill's tiers.yaml — role labels and catalog
+  labels are one vocabulary, not two. The labels name the WORK a model
+  is trusted with (judgment calls where being wrong is expensive;
+  routine rule-following execution; high-volume bulk), not the artifact
+  — deliberately outside vendor marketing vocabulary, which claims words
+  like "frontier" for entire model generations (see the skill's
+  `references/naming-rationale.md` for the criteria and the rejected
+  candidates). Content categories (datasets/runbooks/instructions) are
+  an unrelated concept and are unchanged. Breaking for external
+  `compile-config.yaml` files: rename the `model_category` key to
+  `model_tier` (values `small`/`medium`/`large` become
+  `bulk`/`routine`/`judgment`; `flagship` is unchanged).
+
+### Added
+
+- **Tier-consistency enforcement** (`tests/test_engines_yaml.py`):
+  `TestTierVocabulary` requires every model to declare a valid tier and
+  rejects any reappearance of the legacy `category` field;
+  `TestTierRoleConsistency` cross-checks the installed
+  synthesis-model-tiers `tiers.yaml` — every provider configured here
+  must have a role block there, and every model named in a role list
+  must exist here under the same tier. Drift between the role table and
+  this catalog is now a test failure instead of an observation. The
+  cross-check skips cleanly on machines (and public CI) without the
+  skill installed; `SYNTHESIS_TIERS_FILE` overrides the search path.
+
 ## v3.5.2 — 2026-07-14
 
 ### Security

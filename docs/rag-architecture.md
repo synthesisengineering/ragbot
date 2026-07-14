@@ -65,7 +65,7 @@ Unlike simple RAG implementations that follow a basic "embed query â†’ search â†
    - Bridges the gap between questions and answers
 
 ### Provider-Agnostic Design
-- Uses `engines.yaml` categories (small, medium, large, flagship)
+- Uses `engines.yaml` tiers (bulk, routine, judgment; plus the flagship selector)
 - Automatically selects fast model from same provider as user's model
 - Ensures consistent API key usage across pipeline
 

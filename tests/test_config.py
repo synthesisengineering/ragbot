@@ -110,7 +110,7 @@ class TestGetAllModels:
     def test_get_all_models_model_has_required_fields(self):
         """Each model should have required fields."""
         models = get_all_models()
-        required_fields = ['id', 'name', 'category']
+        required_fields = ['id', 'name', 'tier']
         for provider, model_list in models.items():
             for model in model_list:
                 for field in required_fields:

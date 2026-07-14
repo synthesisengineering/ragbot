@@ -24,17 +24,17 @@ compilation:
   default_token_budget: 50000
   default_compiler:
     engine: anthropic
-    model_category: medium
+    model_tier: routine
   targets:
     - name: claude
       platform: anthropic
-      model_category: medium
+      model_tier: routine
       output: compiled/demo/instructions/claude.md
     - name: chatgpt
       platform: openai
-      model_category: medium
+      model_tier: routine
       output: compiled/demo/instructions/chatgpt.md
     - name: gemini
       platform: google
-      model_category: medium
+      model_tier: routine
       output: compiled/demo/instructions/gemini.md

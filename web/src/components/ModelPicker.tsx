@@ -23,16 +23,16 @@ interface OpenChangeProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  small: 'Fast',
-  medium: 'Balanced',
-  large: 'Powerful',
+const TIER_LABEL: Record<string, string> = {
+  bulk: 'Fast',
+  routine: 'Balanced',
+  judgment: 'Powerful',
 };
 
-const CATEGORY_BADGE_CLASS: Record<string, string> = {
-  small: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-  medium: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-  large: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+const TIER_BADGE_CLASS: Record<string, string> = {
+  bulk: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  routine: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  judgment: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
 };
 
 function formatContext(tokens: number): string {
@@ -54,7 +54,7 @@ function matchesSearch(m: ModelInfo, provider: ProviderInfo | undefined, q: stri
     m.id,
     provider?.name ?? '',
     m.provider,
-    CATEGORY_LABEL[m.category || 'medium'] || '',
+    TIER_LABEL[m.tier || 'routine'] || '',
     m.is_local ? 'local' : '',
     m.supports_thinking ? 'thinking' : '',
   ].join(' ').toLowerCase();
@@ -311,9 +311,9 @@ export function ModelPicker({ value, onChange, disabled, openSignal, onOpenChang
           <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{triggerLabel}</span>
           <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
             {triggerProviderLabel}
-            {selectedModel?.category && (
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${CATEGORY_BADGE_CLASS[selectedModel.category] || ''}`}>
-                {CATEGORY_LABEL[selectedModel.category] || selectedModel.category}
+            {selectedModel?.tier && (
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${TIER_BADGE_CLASS[selectedModel.tier] || ''}`}>
+                {TIER_LABEL[selectedModel.tier] || selectedModel.tier}
               </span>
             )}
             {selectedModel && (
@@ -384,7 +384,7 @@ export function ModelPicker({ value, onChange, disabled, openSignal, onOpenChang
                       const isSelected = model.id === value;
                       const isPinned = pinned.includes(model.id);
                       const isAvailable = model.available !== false;
-                      const tierLabel = CATEGORY_LABEL[model.category || 'medium'] || model.category;
+                      const tierLabel = TIER_LABEL[model.tier || 'routine'] || model.tier;
                       return (
                         <div
                           key={`${section.key}/${model.id}`}
@@ -415,7 +415,7 @@ export function ModelPicker({ value, onChange, disabled, openSignal, onOpenChang
                           </span>
                           <span className="flex-1 truncate">{displayNameFor(model)}</span>
                           {tierLabel && (
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${CATEGORY_BADGE_CLASS[model.category || 'medium'] || ''}`}>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${TIER_BADGE_CLASS[model.tier || 'routine'] || ''}`}>
                               {tierLabel}
                             </span>
                           )}

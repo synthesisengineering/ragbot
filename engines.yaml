@@ -6,15 +6,20 @@
 #
 # Field reference:
 #   display_name       — human-readable label shown in UIs (falls back to `name` if absent)
+#   tier               — role class: judgment | routine | bulk. Labels name the WORK a
+#                        model is trusted with, not the artifact (see the
+#                        synthesis-model-tiers skill's references/naming-rationale.md).
+#                        Same vocabulary as that skill's tiers.yaml (the cross-provider
+#                        ordered-preference table). tests/test_engines_yaml.py enforces
+#                        that the two files agree; edit both together.
+#   is_flagship        — the provider's showcase model (drives default thinking effort).
+#                        Distinct from tier: Opus 4.8 is judgment-tier but not flagship,
+#                        and the ollama catalog carries several flagships.
 #   max_input_tokens   — context window
 #   max_output_tokens  — maximum tokens the model can generate in response
 #   default_max_tokens — recommended request default (typically ~80% of max_output_tokens)
 #   thinking           — adaptive/extended thinking metadata (informational; chat code may
 #                        opt into it via LiteLLM `thinking` parameter)
-#
-# Tier-role mapping (frontier / efficient / light) lives OUTSIDE this file, in the
-# synthesis-model-tiers skill (synthesis-skills repo). This file is the capability
-# catalog; that file is the cross-tool role policy.
 #
 # Sources (July 14, 2026):
 #   Anthropic:  https://platform.claude.com/docs/en/docs/about-claude/models/overview
@@ -31,7 +36,7 @@ engines:
       #  support against the API before enabling.)
       - name: gpt-5.6-luna
         display_name: GPT-5.6 Luna
-        category: small
+        tier: bulk
         supports_system_role: true
         max_temperature: 1
         temperature: 1.0
@@ -43,7 +48,7 @@ engines:
       # Reasoning modes carried forward from the GPT-5.x line convention.
       - name: gpt-5.6-terra
         display_name: GPT-5.6 Terra
-        category: medium
+        tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 1.0
@@ -58,7 +63,7 @@ engines:
       # Reasoning modes carried forward from the GPT-5.x line convention.
       - name: gpt-5.6-sol
         display_name: GPT-5.6 Sol
-        category: large
+        tier: judgment
         is_flagship: true
         supports_system_role: true
         max_temperature: 1
@@ -79,7 +84,7 @@ engines:
       # Supports extended thinking (per July 2026 docs), not adaptive.
       - name: claude-haiku-4-5-20251001
         display_name: Claude Haiku 4.5
-        category: small
+        tier: bulk
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -94,7 +99,7 @@ engines:
       # 1M context, 128k output, adaptive thinking. `effort` defaults to high on the API.
       - name: claude-sonnet-5
         display_name: Claude Sonnet 5
-        category: medium
+        tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -107,10 +112,10 @@ engines:
       # Claude Opus 4.8 — complex agentic coding and enterprise work
       # Pricing: $5/$25 per MTok. 1M context, 128k output, adaptive thinking.
       # `effort` defaults to high on all surfaces. Kept alongside Fable 5 as the
-      # cost-conscious frontier fallback (see synthesis-model-tiers).
+      # cost-conscious judgment-tier fallback (see synthesis-model-tiers).
       - name: claude-opus-4-8
         display_name: Claude Opus 4.8
-        category: large
+        tier: judgment
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -126,7 +131,7 @@ engines:
       # hence temperature 1.0 (thinking requires temp=1; backends normalize).
       - name: claude-fable-5
         display_name: Claude Fable 5
-        category: large
+        tier: judgment
         is_flagship: true
         supports_system_role: true
         max_temperature: 1
@@ -147,7 +152,7 @@ engines:
       # 1M context, supports thinking levels (minimal/low/medium/high).
       - name: gemini/gemini-3.1-flash-lite-preview
         display_name: Gemini 3.1 Flash Lite
-        category: small
+        tier: bulk
         supports_system_role: true
         max_temperature: 2
         temperature: 0.75
@@ -160,7 +165,7 @@ engines:
       # Gemini 3 Flash (preview) — balanced speed and capability.
       - name: gemini/gemini-3-flash-preview
         display_name: Gemini 3 Flash
-        category: medium
+        tier: routine
         supports_system_role: true
         max_temperature: 2
         temperature: 0.75
@@ -174,7 +179,7 @@ engines:
       # Released February 19, 2026. 1M context, multimodal.
       - name: gemini/gemini-3.1-pro-preview
         display_name: Gemini 3.1 Pro
-        category: large
+        tier: judgment
         is_flagship: true
         supports_system_role: true
         max_temperature: 2
@@ -201,7 +206,7 @@ engines:
       # Gemma 4 E4B — small/fast tier. Effective 4B params (Matformer).
       - name: gemma4:e4b
         display_name: Gemma 4 E4B
-        category: small
+        tier: bulk
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -218,7 +223,7 @@ engines:
       # Gemma 4 26B MoE — medium tier. ~3.8B active params per token; high throughput.
       - name: gemma4:26b
         display_name: Gemma 4 26B MoE
-        category: medium
+        tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -235,7 +240,7 @@ engines:
       # Gemma 4 31B Dense — large tier. Maximum quality.
       - name: gemma4:31b
         display_name: Gemma 4 31B
-        category: large
+        tier: judgment
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -255,7 +260,7 @@ engines:
       # 17B are active per token. Best fit: M5 Max 128GB and up.
       - name: llama4:scout
         display_name: Llama 4 Scout (17B-16E)
-        category: medium
+        tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -273,7 +278,7 @@ engines:
       # Released April 2025. 1M context. Mac Studio territory only.
       - name: llama4:maverick
         display_name: Llama 4 Maverick (17B-128E)
-        category: large
+        tier: judgment
         is_flagship: true
         supports_system_role: true
         max_temperature: 1
@@ -292,7 +297,7 @@ engines:
       # Apache 2.0. Successor to the Qwen3.5 line; MLX-native tags ship.
       - name: qwen3.6:27b
         display_name: Qwen3.6 27B
-        category: medium
+        tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -310,7 +315,7 @@ engines:
       # 35B total / 3B active. Apache 2.0. Optimised for coding workloads.
       - name: qwen3.6:35b-a3b
         display_name: Qwen3.6 35B-A3B (MoE)
-        category: large
+        tier: judgment
         is_flagship: true
         supports_system_role: true
         max_temperature: 1
@@ -334,7 +339,7 @@ engines:
       # Mac Studio territory — Q4 is ~280GB; Q3 / Q2 viable on 192GB.
       - name: deepseek-v3.2:671b
         display_name: DeepSeek V3.2 (MoE, 671B-A37B)
-        category: large
+        tier: judgment
         is_flagship: true
         supports_system_role: true
         max_temperature: 1
@@ -353,7 +358,7 @@ engines:
       # Released December 2025. 256K context. Apache 2.0 weights via mistralai/.
       - name: mistral-large-3:675b
         display_name: Mistral Large 3 (MoE, 675B-A41B)
-        category: large
+        tier: judgment
         is_flagship: true
         supports_system_role: true
         max_temperature: 1
@@ -372,7 +377,7 @@ engines:
       # The most-capable Mistral model that fits on a single MacBook Pro.
       - name: mistral-medium-3.5:128b
         display_name: Mistral Medium 3.5 (128B Dense)
-        category: large
+        tier: judgment
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
@@ -390,7 +395,7 @@ engines:
       # Apache 2.0. Small active footprint but full weights matter for fit.
       - name: mistral-small-4:119b
         display_name: Mistral Small 4 (MoE, 119B-A6B)
-        category: medium
+        tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75

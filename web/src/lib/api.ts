@@ -65,7 +65,7 @@ export interface ModelInfo {
   supports_streaming: boolean;
   supports_system_role: boolean;
   available?: boolean;
-  category?: string;
+  tier?: string;
   max_output_tokens?: number;
   temperature?: number;
   max_temperature?: number;

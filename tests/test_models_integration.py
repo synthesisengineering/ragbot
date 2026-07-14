@@ -42,8 +42,8 @@ def get_available_models():
 
 
 def model_is_expensive(model):
-    """Check if a model is expensive (large/flagship)."""
-    return model.get('is_flagship', False) or model.get('category') == 'large'
+    """Check if a model is expensive (judgment-tier/flagship)."""
+    return model.get('is_flagship', False) or model.get('tier') == 'judgment'
 
 
 def _ollama_pulled_models():
@@ -210,7 +210,7 @@ class TestModelParameters:
             pytest.skip("No Anthropic models configured")
 
         # Use the smallest/cheapest model
-        model = next((m for m in anthropic_models if m.get('category') == 'small'), anthropic_models[0])
+        model = next((m for m in anthropic_models if m.get('tier') == 'bulk'), anthropic_models[0])
 
         for temp in [0.25, 0.5, 0.75]:
             response = chat(

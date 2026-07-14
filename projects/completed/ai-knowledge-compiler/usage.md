@@ -78,15 +78,15 @@ compilation:
   default_token_budget: 100000
   default_compiler:
     engine: anthropic
-    model_category: flagship
+    model_tier: flagship
   targets:
     - name: claude-projects
       platform: anthropic
-      model_category: flagship
+      model_tier: flagship
       output: compiled/claude-projects/
     - name: chatgpt-projects
       platform: openai
-      model_category: flagship
+      model_tier: flagship
       output: compiled/chatgpt-projects/
 ```
 

@@ -246,7 +246,7 @@ def get_all_models() -> Dict[str, List[Dict[str, Any]]]:
                 "name": model['name'],
                 # Human-readable label for UIs; falls back to the canonical name.
                 "display_name": model.get('display_name') or model['name'],
-                "category": model.get('category', 'medium'),
+                "tier": model.get('tier', 'routine'),
                 "context_window": model.get('max_input_tokens', 128000),
                 "max_output_tokens": model.get('max_output_tokens'),
                 "supports_streaming": True,  # All current models support streaming
@@ -415,49 +415,50 @@ def get_available_models(workspace: Optional[str] = None) -> Dict[str, List[Dict
     return available
 
 
-def get_model_by_category(provider: str, category: str) -> Optional[str]:
-    """Get a model ID for a specific provider and category.
+def get_model_by_tier(provider: str, tier: str) -> Optional[str]:
+    """Get a model ID for a specific provider and tier.
 
     This enables provider-agnostic model selection. Instead of hardcoding
-    "claude-haiku" for fast operations, request category="small" and get
+    "claude-haiku" for fast operations, request tier="bulk" and get
     the appropriate fast model for that provider.
 
-    Categories defined in engines.yaml:
-    - "small": Fast, cost-effective models (Haiku, GPT-5-mini, Flash Lite)
-    - "medium": Balanced models (Sonnet, GPT-5.2-chat, Flash)
-    - "large": Most capable models (Opus, GPT-5.2, Gemini 3 Pro)
+    Tiers defined in engines.yaml (same vocabulary as the
+    synthesis-model-tiers skill's tiers.yaml — labels name the work):
+    - "bulk": Fast, cost-effective models (Haiku, GPT-5.6 Luna, Flash Lite)
+    - "routine": Balanced models (Sonnet, GPT-5.6 Terra, Flash)
+    - "judgment": Most capable models (Fable, Opus, GPT-5.6 Sol, Gemini Pro)
 
     Args:
         provider: Provider name ('anthropic', 'openai', 'google')
-        category: Model category ('small', 'medium', 'large')
+        tier: Model tier ('bulk', 'routine', 'judgment')
 
     Returns:
         Model ID in LiteLLM format (e.g., 'anthropic/claude-haiku-4-5-20251001'),
-        or None if no model found for that provider/category
+        or None if no model found for that provider/tier
     """
     all_models = get_all_models()
     provider_models = all_models.get(provider, [])
 
     for model in provider_models:
-        if model.get('category') == category:
+        if model.get('tier') == tier:
             return model['id']
 
     return None
 
 
 def get_fast_model_for_provider(model_id: str) -> Optional[str]:
-    """Get the fast (small category) model for the same provider as model_id.
+    """Get the fast (bulk-tier) model for the same provider as model_id.
 
     This is used for auxiliary LLM calls (planner, reranker, etc.) where we
     want to use a fast model from the same provider as the user's selected
     model. This ensures consistent API key usage and billing.
 
     Example:
-        get_fast_model_for_provider("anthropic/claude-opus-4-5-20251101")
+        get_fast_model_for_provider("anthropic/claude-fable-5")
         → "anthropic/claude-haiku-4-5-20251001"
 
-        get_fast_model_for_provider("openai/gpt-5.2")
-        → "openai/gpt-5-mini"
+        get_fast_model_for_provider("openai/gpt-5.6-sol")
+        → "openai/gpt-5.6-luna"
 
     Args:
         model_id: The user's selected model ID
@@ -467,4 +468,4 @@ def get_fast_model_for_provider(model_id: str) -> Optional[str]:
         or None if not found
     """
     provider = get_provider_for_model(model_id)
-    return get_model_by_category(provider, 'small')
+    return get_model_by_tier(provider, 'bulk')

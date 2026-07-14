@@ -1,13 +1,13 @@
 """
 Config Parser for AI Knowledge Compiler
 
-Loads and validates compile-config.yaml files, resolves model categories
+Loads and validates compile-config.yaml files, resolves model tiers
 to actual model IDs using engines.yaml.
 
 Library API:
 - load_compile_config(path) -> dict
 - load_engines_config(path) -> dict
-- resolve_model(engines_config, platform, category) -> str
+- resolve_model(engines_config, platform, tier) -> str
 - validate_config(config) -> list[str] (returns validation errors)
 """
 
@@ -73,20 +73,22 @@ def load_engines_config(engines_path: Optional[str] = None) -> dict:
     raise FileNotFoundError("Could not find engines.yaml in any standard location")
 
 
-def resolve_model(engines_config: dict, platform: str, category: str = 'flagship') -> str:
+def resolve_model(engines_config: dict, platform: str, tier: str = 'flagship') -> str:
     """
-    Resolve a model category to an actual model ID.
+    Resolve a model tier to an actual model ID.
 
     Args:
         engines_config: Loaded engines.yaml configuration
         platform: Platform name (anthropic, openai, google)
-        category: Model category (flagship, large, medium, small)
+        tier: Model tier (flagship, judgment, routine, bulk).
+              'flagship' selects the model marked is_flagship: true;
+              the other three match the model's `tier` field.
 
     Returns:
-        Model ID string (e.g., 'claude-opus-4-5-20251101')
+        Model ID string (e.g., 'claude-fable-5')
 
     Raises:
-        ValueError: If platform or category not found
+        ValueError: If platform or tier not found
     """
     engines = engines_config.get('engines', [])
 
@@ -103,25 +105,25 @@ def resolve_model(engines_config: dict, platform: str, category: str = 'flagship
     models = engine.get('models', [])
 
     # If looking for flagship, find the model with is_flagship: true
-    if category == 'flagship':
+    if tier == 'flagship':
         for model in models:
             if model.get('is_flagship'):
                 return model['name']
-        # Fallback to first 'large' category model
+        # Fallback to first judgment-tier model
         for model in models:
-            if model.get('category') == 'large':
+            if model.get('tier') == 'judgment':
                 return model['name']
         # Fallback to first model
         if models:
             return models[0]['name']
         raise ValueError(f"No flagship model found for platform '{platform}'")
 
-    # Find model by category
+    # Find model by tier
     for model in models:
-        if model.get('category') == category:
+        if model.get('tier') == tier:
             return model['name']
 
-    raise ValueError(f"No model with category '{category}' found for platform '{platform}'")
+    raise ValueError(f"No model with tier '{tier}' found for platform '{platform}'")
 
 
 def get_model_info(engines_config: dict, platform: str, model_name: str) -> dict:
@@ -184,8 +186,8 @@ def validate_config(config: dict) -> list:
                     errors.append(f"Target {i}: missing 'name' field")
                 if 'platform' not in target:
                     errors.append(f"Target {i}: missing 'platform' field")
-                if 'model_category' not in target and 'model' not in target:
-                    errors.append(f"Target {i}: missing 'model_category' or 'model' field")
+                if 'model_tier' not in target and 'model' not in target:
+                    errors.append(f"Target {i}: missing 'model_tier' or 'model' field")
 
     return errors
 
@@ -233,7 +235,7 @@ def get_default_compiler(config: dict) -> dict:
     """Get the default compiler settings from config."""
     return config.get('compilation', {}).get('default_compiler', {
         'engine': 'anthropic',
-        'model_category': 'flagship'
+        'model_tier': 'flagship'
     })
 
 

@@ -40,12 +40,12 @@ class TestGetFastModel:
         assert fast == 'anthropic/claude-haiku-4-5-20251001'
 
     def test_get_fast_model_for_openai(self):
-        """Fast model for OpenAI should be the small-category model from engines.yaml."""
+        """Fast model for OpenAI should be the bulk-tier model from engines.yaml."""
         fast = _get_fast_model('openai/gpt-5.6-terra')
         assert fast == 'openai/gpt-5.6-luna'
 
     def test_get_fast_model_for_google(self):
-        """Fast model for Google should be the small-category Gemini Flash Lite."""
+        """Fast model for Google should be the bulk-tier Gemini Flash Lite."""
         fast = _get_fast_model('gemini/gemini-3.1-pro-preview')
         assert fast == 'gemini/gemini-3.1-flash-lite-preview'
 
@@ -345,19 +345,19 @@ class TestProviderAgnosticIntegration:
         assert 'openai' in fast_openai
         assert 'gemini' in fast_google
 
-    def test_fast_model_uses_small_category(self):
-        """Fast model should use 'small' category models."""
-        from synthesis_engine.config import get_model_by_category
+    def test_fast_model_uses_bulk_tier(self):
+        """Fast model should use bulk-tier models."""
+        from synthesis_engine.config import get_model_by_tier
 
-        # Verify we're using category-based selection
-        anthropic_small = get_model_by_category('anthropic', 'small')
-        openai_small = get_model_by_category('openai', 'small')
-        google_small = get_model_by_category('google', 'small')
+        # Verify we're using tier-based selection
+        anthropic_bulk = get_model_by_tier('anthropic', 'bulk')
+        openai_bulk = get_model_by_tier('openai', 'bulk')
+        google_bulk = get_model_by_tier('google', 'bulk')
 
         # These should match _get_fast_model results
-        assert anthropic_small == _get_fast_model('anthropic/claude-opus-4-8')
-        assert openai_small == _get_fast_model('openai/gpt-5.6-terra')
-        assert google_small == _get_fast_model('gemini/gemini-3.1-pro-preview')
+        assert anthropic_bulk == _get_fast_model('anthropic/claude-opus-4-8')
+        assert openai_bulk == _get_fast_model('openai/gpt-5.6-terra')
+        assert google_bulk == _get_fast_model('gemini/gemini-3.1-pro-preview')
 
 
 class TestFallbackBehavior:

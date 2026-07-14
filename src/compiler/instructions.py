@@ -321,7 +321,7 @@ def compile_instructions(content: str, platform: str, model: str,
         # Get default model from engines.yaml - never hardcode model names
         if not fallback_model:
             engines_config = load_engines_config()
-            fallback_model = resolve_model(engines_config, fallback_platform, 'medium')
+            fallback_model = resolve_model(engines_config, fallback_platform, 'routine')
         fallback_key = get_api_key('anthropic')
 
         if not fallback_key:

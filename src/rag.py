@@ -1202,6 +1202,40 @@ def _get_embedding_dimension(model) -> int:
         return model.get_sentence_embedding_dimension()
 
 
+def _get_embedding_model_version(embedding_model_name: str) -> Optional[str]:
+    """Build a version string that captures embedding drift finer than the
+    bare model name.
+
+    ``chunks.embedding_model`` (existing since migration 0001) already
+    records the model *name* (e.g. "all-MiniLM-L6-v2"). This function adds
+    the ``sentence-transformers`` package version, since the same model
+    checkpoint can produce different embeddings across library versions
+    (tokenization/pooling changes). The combined string is what future
+    drift detection compares to decide whether a chunk needs re-embedding.
+    """
+    try:
+        import sentence_transformers
+        pkg_version = getattr(sentence_transformers, '__version__', None)
+    except ImportError:
+        pkg_version = None
+
+    if pkg_version:
+        return f"{embedding_model_name}@sentence-transformers-{pkg_version}"
+    return embedding_model_name
+
+
+def _hash_chunk_text(text: str) -> str:
+    """Stable content hash for a chunk's embedded text.
+
+    Used for future drift detection: re-embed only rows whose source hash
+    changed, rather than the whole workspace. Hashing at chunk granularity
+    (not file granularity) means an edit to one chunk in a file doesn't
+    force re-embedding of untouched sibling chunks.
+    """
+    import hashlib
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
 def is_rag_available() -> bool:
     """Check if RAG dependencies are available.
 
@@ -1250,14 +1284,24 @@ def init_collection(workspace_name: str, vector_size: int = 384) -> bool:
     return vs.init_collection(workspace_name, vector_size=vector_size)
 
 
-def index_content(workspace_name: str, content_paths: list, content_type: str = 'datasets') -> dict:
+def index_content(workspace_name: str, content_paths: list, content_type: str = 'datasets',
+                   content_tier: str = 'topic-specific') -> dict:
     """
     Index content into the configured vector store.
 
     Args:
         workspace_name: Name of the workspace
         content_paths: List of file/directory paths to index
-        content_type: Type of content ('datasets', 'runbooks')
+        content_type: Type of content ('datasets', 'runbooks', 'archive', ...).
+            Describes WHAT the content is.
+        content_tier: Retrieval tier ('frequent-access', 'topic-specific',
+            'archive-only'). Describes how eagerly the content should be
+            retrieved. Default 'topic-specific' matches the existing
+            source/datasets/ content — the only tier indexed before this
+            parameter existed, so pre-migration rows and un-tiered callers
+            classify identically. 'archive-only' content is excluded from
+            default retrieval (see synthesis_engine.vectorstore's
+            _DEFAULT_VISIBLE_TIERS) and only reachable via rag.search_archive().
 
     Returns:
         Dictionary with indexing stats
@@ -1276,6 +1320,7 @@ def index_content(workspace_name: str, content_paths: list, content_type: str = 
         return {'error': 'RAG not available', 'indexed': 0}
 
     embedding_model_name = os.environ.get('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
+    embedding_model_version = _get_embedding_model_version(embedding_model_name)
 
     # Ensure storage exists for this workspace
     if not init_collection(workspace_name, _get_embedding_dimension(model)):
@@ -1333,6 +1378,9 @@ def index_content(workspace_name: str, content_paths: list, content_type: str = 
             content_type=content_type,
             source_path=chunk.metadata.get('source_file'),
             embedding_model=embedding_model_name,
+            content_tier=content_tier,
+            content_hash=_hash_chunk_text(chunk.text),
+            embedding_model_version=embedding_model_version,
             metadata=chunk_meta,
         ))
 
@@ -1344,6 +1392,7 @@ def index_content(workspace_name: str, content_paths: list, content_type: str = 
         'workspace': workspace_name,
         'indexed': written,
         'content_type': content_type,
+        'content_tier': content_tier,
     }
 
 
@@ -1571,6 +1620,116 @@ def search(workspace_name: str, query: str, limit: int = 5,
     except Exception as e:
         logger.error(f"Search failed: {e}")
         return []
+
+
+def search_archive(workspace_name: str, query: str, limit: int = 10,
+                    max_tokens: int = 8000,
+                    use_preprocessing: bool = True) -> str:
+    """Explicitly search archive-tier content for a workspace.
+
+    Archive-tier content — personal-archive/ and, in owner context,
+    private-repo content indexed via ``ragbot index --tier archive`` — is
+    excluded from every default retrieval path (``search()``,
+    ``hybrid_search()``, ``get_relevant_context()``). The pgvector backend
+    filters it out unless a caller explicitly asks for the 'archive-only'
+    tier. This function is that explicit ask: the ONLY entry point that
+    can surface archive-tier chunks, mirroring how MemGPT/Zep gate their
+    archival-memory tier behind an explicit search call rather than
+    folding it into default retrieval.
+
+    Deliberately NOT wired into get_relevant_context() or search() — this
+    keeps the safe-by-default guarantee at the API-shape level, not just
+    the data level: a caller has to import and call a differently-named
+    function on purpose to reach archive content.
+
+    Args:
+        workspace_name: Name of the workspace to search
+        query: Search query (typically a "search my archives" request)
+        limit: Maximum number of results
+        max_tokens: Token budget for the returned context block
+        use_preprocessing: Expand contractions before embedding/keyword search
+
+    Returns:
+        A formatted ``<retrieved_context>`` block (same shape as
+        get_relevant_context()) tagged tier="archive-only", or "" if
+        nothing matched / RAG is unavailable.
+    """
+    if not VECTOR_STORE_AVAILABLE:
+        return ""
+    vs = get_vector_store()
+    model = _get_embedding_model()
+    if vs is None or model is None:
+        return ""
+
+    if use_preprocessing:
+        search_query = preprocess_query(query)['processed_query']
+    else:
+        search_query = query
+
+    try:
+        query_vector = model.encode(search_query).tolist()
+        vector_hits = vs.search(
+            workspace_name, query_vector=query_vector, limit=limit,
+            content_tiers=['archive-only'],
+        )
+        keyword_hits = vs.keyword_search(
+            workspace_name, search_query, limit=limit,
+            content_tiers=['archive-only'],
+        )
+    except Exception as e:
+        logger.error(f"Archive search failed: {e}")
+        return ""
+
+    def _to_result(hit) -> Dict[str, Any]:
+        return {'text': hit.text, 'score': hit.score, 'metadata': dict(hit.metadata)}
+
+    vector_results = [_to_result(h) for h in vector_hits]
+    keyword_results = [_to_result(h) for h in keyword_hits]
+
+    if vector_results and keyword_results:
+        merged = reciprocal_rank_fusion([
+            [(r, r['score']) for r in vector_results],
+            [(r, r['score']) for r in keyword_results],
+        ])
+        results = [doc for doc, _score in merged]
+    else:
+        results = vector_results or keyword_results
+
+    if not results:
+        return ""
+
+    context_parts = []
+    current_tokens = 0
+    seen_files = set()
+
+    for result in results[:limit]:
+        text = result['text']
+        text_tokens = len(text) // 4
+        if current_tokens + text_tokens > max_tokens:
+            continue
+
+        source = result['metadata'].get('filename', 'unknown')
+        title = result['metadata'].get('title', '')
+        seen_files.add(source)
+
+        header = f"[archive: {source}]"
+        if title and source not in title:
+            header = f"[archive: {source} - {title}]"
+
+        context_parts.append(f"{header}\n{text}\n")
+        current_tokens += text_tokens
+
+    if not context_parts:
+        return ""
+
+    sources_note = f"<!-- Archive sources: {', '.join(sorted(seen_files)[:10])} -->\n"
+
+    return (
+        '<retrieved_context tier="archive-only">\n'
+        + sources_note
+        + "\n---\n".join(context_parts)
+        + "</retrieved_context>"
+    )
 
 
 def search_across_workspaces(workspaces: List[str], query: str, limit: int = 5,
@@ -2039,6 +2198,9 @@ def _build_skill_chunks(skill, embedding_model_name: str, model) -> List["Vector
                 content_type=content_type,
                 source_path=sf.absolute_path,
                 embedding_model=embedding_model_name,
+                content_tier='topic-specific',
+                content_hash=_hash_chunk_text(chunk.text),
+                embedding_model_version=_get_embedding_model_version(embedding_model_name),
                 metadata=metadata,
             ))
 
@@ -2135,7 +2297,11 @@ def index_workspace_by_name(workspace_name: str, force: bool = False) -> int:
         return 0
 
     if force:
-        clear_collection(workspace_name)
+        # Tier-scoped clear: only wipe 'topic-specific' rows, not any
+        # 'archive-only' content that may coexist in the same workspace
+        # collection. A plain full wipe here would silently delete archive
+        # chunks that this code path never re-indexes.
+        clear_collection(workspace_name, content_tier='topic-specific')
 
     # Get datasets paths (may be a list or a single path)
     datasets = workspace.get('datasets', [])
@@ -2150,7 +2316,65 @@ def index_workspace_by_name(workspace_name: str, force: bool = False) -> int:
         return 0
 
     # Index the content directly
-    result = index_content(workspace_name, datasets, 'datasets')
+    result = index_content(workspace_name, datasets, 'datasets', content_tier='topic-specific')
+    return result.get('indexed', 0)
+
+
+def index_workspace_archive_by_name(workspace_name: str, force: bool = False) -> int:
+    """Index a workspace's archive-tier content (personal-archive/ and, in
+    owner context, private-repo content) — separately from the normal
+    topic-specific re-index.
+
+    Archive-tier content is gated behind RAGBOT_OWNER_CONTEXT=1, the same
+    flag that already gates -private repo discovery (ADR-014). This
+    function checks that flag explicitly as defense-in-depth: even if a
+    future change to workspace-path resolution accidentally surfaced an
+    archive path outside owner context, this entry point would still
+    refuse to index it.
+
+    Args:
+        workspace_name: Name/dir_name of the workspace
+        force: If True, clear existing archive-tier chunks first (does NOT
+            touch topic-specific chunks in the same workspace collection)
+
+    Returns:
+        Number of chunks indexed (0 if owner context is off, or the
+        workspace has no personal-archive/ content).
+    """
+    from synthesis_engine.workspaces import is_owner_context
+
+    if not is_owner_context():
+        logger.warning(
+            "Archive-tier indexing requires RAGBOT_OWNER_CONTEXT=1; "
+            "refusing to index workspace %s.", workspace_name,
+        )
+        return 0
+
+    import sys
+    parent_dir = os.path.dirname(os.path.abspath(__file__))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
+    try:
+        from ragbot import get_workspace
+        workspace = get_workspace(workspace_name)
+    except Exception as e:
+        logger.error(f"Failed to get workspace {workspace_name}: {e}")
+        return 0
+
+    if force:
+        clear_collection(workspace_name, content_tier='archive-only')
+
+    archive_paths = workspace.get('archive', [])
+    if isinstance(archive_paths, str):
+        archive_paths = [archive_paths]
+    archive_paths = [p for p in archive_paths if p and os.path.exists(p)]
+
+    if not archive_paths:
+        logger.warning(f"No archive paths found for workspace {workspace_name}")
+        return 0
+
+    result = index_content(workspace_name, archive_paths, 'archive', content_tier='archive-only')
     return result.get('indexed', 0)
 
 
@@ -2575,12 +2799,15 @@ def verify_and_correct(
     return result
 
 
-def clear_collection(workspace_name: str) -> bool:
+def clear_collection(workspace_name: str, content_tier: Optional[str] = None) -> bool:
     """
-    Clear all indexed content for a workspace.
+    Clear indexed content for a workspace.
 
     Args:
         workspace_name: Name of the workspace
+        content_tier: If given, only chunks in this tier are removed (and
+            the workspace row itself is left intact). If None (default),
+            everything for the workspace is wiped, matching prior behavior.
 
     Returns:
         True if successful
@@ -2591,9 +2818,12 @@ def clear_collection(workspace_name: str) -> bool:
     if vs is None:
         return False
     try:
-        ok = vs.delete_collection(workspace_name)
+        ok = vs.delete_collection(workspace_name, content_tier=content_tier)
         if ok:
-            logger.info("Cleared collection: %s (backend=%s)", workspace_name, vs.backend_name)
+            logger.info(
+                "Cleared collection: %s (backend=%s, content_tier=%s)",
+                workspace_name, vs.backend_name, content_tier or 'all',
+            )
         return ok
     except Exception as exc:
         logger.error("Failed to clear collection: %s", exc)

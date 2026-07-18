@@ -20,12 +20,24 @@ import os
 import re
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from ..observability import record_retrieval_result, retrieval_span
-from . import Point, SearchHit, VectorStore
+from . import DEFAULT_VISIBLE_CONTENT_TIERS, Point, SearchHit, VectorStore
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_tiers(content_tiers: Optional[Sequence[str]]) -> List[str]:
+    """Resolve the effective tier filter for a query.
+
+    ``None`` means "the caller didn't ask for a specific tier" — apply the
+    safe default (excludes archive-only). A caller that wants archive-tier
+    content must pass an explicit sequence including it.
+    """
+    if content_tiers is None:
+        return list(DEFAULT_VISIBLE_CONTENT_TIERS)
+    return list(content_tiers)
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +162,41 @@ class PgvectorBackend(VectorStore):
         self._migrated = True
 
     # ------------------------------------------------------------------
+    # Row-Level Security session context (migration 0003)
+    # ------------------------------------------------------------------
+    #
+    # RLS policies on `documents` and `chunks` (see 0003_content_tiers.sql)
+    # require `app.current_workspace` (or the `app.rls_admin` escape
+    # hatch) to be set for the current transaction before any query
+    # touches those tables — otherwise the policies default-deny and the
+    # query silently sees zero rows. `SET LOCAL`-equivalent semantics
+    # (via `set_config(..., is_local=true)`) are used so the setting
+    # reverts at the end of the transaction and never leaks to the next
+    # borrower of a pooled connection.
+    #
+    # `set_config()` (a normal function call) is used instead of the bare
+    # `SET` statement because psycopg's parameter binding does not support
+    # `SET x = %s` — SET is a utility statement, not a normal expression
+    # position, so the value can't be passed as a bind parameter. See
+    # https://www.psycopg.org/docs/usage.html and the info faq re: SET.
+
+    def _set_workspace_context(self, cur, workspace: str) -> None:
+        """Bind `app.current_workspace` for the current transaction."""
+        cur.execute(
+            "SELECT set_config('app.current_workspace', %s, true)",
+            (workspace,),
+        )
+
+    def _set_admin_context(self, cur) -> None:
+        """Bind the `app.rls_admin` escape hatch for genuinely
+        cross-workspace admin queries (e.g. list_collections()).
+
+        Only call this for operations that have no single workspace to
+        scope to. Everything else should use `_set_workspace_context`.
+        """
+        cur.execute("SELECT set_config('app.rls_admin', 'on', true)")
+
+    # ------------------------------------------------------------------
     # interface implementations
     # ------------------------------------------------------------------
 
@@ -186,6 +233,8 @@ class PgvectorBackend(VectorStore):
         try:
             with self._connection() as conn:
                 with conn.cursor() as cur:
+                    self._set_workspace_context(cur, workspace)
+
                     # Upsert documents, returning their ids.
                     doc_ids: Dict[str, int] = {}
                     for path, ref in documents_by_path.items():
@@ -248,8 +297,9 @@ class PgvectorBackend(VectorStore):
                                 (document_id, workspace, chunk_index, chunk_uid,
                                  text, char_start, char_end,
                                  embedding, embedding_model,
-                                 content_type, filename, title, metadata)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                 content_type, filename, title, metadata,
+                                 content_tier, content_hash, embedding_model_version)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (workspace, chunk_uid) DO UPDATE
                                 SET text            = EXCLUDED.text,
                                     chunk_index     = EXCLUDED.chunk_index,
@@ -261,7 +311,10 @@ class PgvectorBackend(VectorStore):
                                     filename        = EXCLUDED.filename,
                                     title           = EXCLUDED.title,
                                     metadata        = EXCLUDED.metadata,
-                                    document_id     = EXCLUDED.document_id
+                                    document_id     = EXCLUDED.document_id,
+                                    content_tier    = EXCLUDED.content_tier,
+                                    content_hash    = EXCLUDED.content_hash,
+                                    embedding_model_version = EXCLUDED.embedding_model_version
                             """,
                             (
                                 document_id,
@@ -277,6 +330,9 @@ class PgvectorBackend(VectorStore):
                                 p.filename,
                                 p.title,
                                 _to_jsonb(p.metadata),
+                                p.content_tier,
+                                p.content_hash,
+                                p.embedding_model_version,
                             ),
                         )
                         written += 1
@@ -292,7 +348,9 @@ class PgvectorBackend(VectorStore):
         query_vector: List[float],
         limit: int = 10,
         content_type: Optional[str] = None,
+        content_tiers: Optional[Sequence[str]] = None,
     ) -> List[SearchHit]:
+        tiers = _resolve_tiers(content_tiers)
         with retrieval_span(
             workspace=workspace,
             k=limit,
@@ -304,6 +362,7 @@ class PgvectorBackend(VectorStore):
             try:
                 with self._connection() as conn:
                     with conn.cursor() as cur:
+                        self._set_workspace_context(cur, workspace)
                         if content_type:
                             cur.execute(
                                 """
@@ -313,10 +372,11 @@ class PgvectorBackend(VectorStore):
                                        filename, title, content_type, metadata
                                 FROM chunks
                                 WHERE workspace = %s AND content_type = %s
+                                  AND content_tier = ANY(%s)
                                 ORDER BY embedding <=> %s::vector
                                 LIMIT %s
                                 """,
-                                (query_vector, workspace, content_type, query_vector, limit),
+                                (query_vector, workspace, content_type, tiers, query_vector, limit),
                             )
                         else:
                             cur.execute(
@@ -327,10 +387,11 @@ class PgvectorBackend(VectorStore):
                                        filename, title, content_type, metadata
                                 FROM chunks
                                 WHERE workspace = %s
+                                  AND content_tier = ANY(%s)
                                 ORDER BY embedding <=> %s::vector
                                 LIMIT %s
                                 """,
-                                (query_vector, workspace, query_vector, limit),
+                                (query_vector, workspace, tiers, query_vector, limit),
                             )
                         hits = [_row_to_hit(row) for row in cur.fetchall()]
                         top_score = hits[0].score if hits else None
@@ -355,9 +416,11 @@ class PgvectorBackend(VectorStore):
         query: str,
         limit: int = 10,
         content_type: Optional[str] = None,
+        content_tiers: Optional[Sequence[str]] = None,
     ) -> List[SearchHit]:
         # Use websearch_to_tsquery: forgiving parser, handles bare strings
         # like "show me my biography" without forcing & between terms.
+        tiers = _resolve_tiers(content_tiers)
         with retrieval_span(
             workspace=workspace,
             query=query,
@@ -369,6 +432,7 @@ class PgvectorBackend(VectorStore):
             try:
                 with self._connection() as conn:
                     with conn.cursor() as cur:
+                        self._set_workspace_context(cur, workspace)
                         if content_type:
                             cur.execute(
                                 """
@@ -379,11 +443,12 @@ class PgvectorBackend(VectorStore):
                                 FROM chunks
                                 WHERE workspace = %s
                                   AND content_type = %s
+                                  AND content_tier = ANY(%s)
                                   AND text_search @@ websearch_to_tsquery('english', %s)
                                 ORDER BY score DESC
                                 LIMIT %s
                                 """,
-                                (query, workspace, content_type, query, limit),
+                                (query, workspace, content_type, tiers, query, limit),
                             )
                         else:
                             cur.execute(
@@ -394,11 +459,12 @@ class PgvectorBackend(VectorStore):
                                        filename, title, content_type, metadata
                                 FROM chunks
                                 WHERE workspace = %s
+                                  AND content_tier = ANY(%s)
                                   AND text_search @@ websearch_to_tsquery('english', %s)
                                 ORDER BY score DESC
                                 LIMIT %s
                                 """,
-                                (query, workspace, query, limit),
+                                (query, workspace, tiers, query, limit),
                             )
                         hits = [_row_to_hit(row) for row in cur.fetchall()]
                         top_score = hits[0].score if hits else None
@@ -422,10 +488,13 @@ class PgvectorBackend(VectorStore):
         workspace: str,
         limit: int = 1000,
         content_type: Optional[str] = None,
+        content_tiers: Optional[Sequence[str]] = None,
     ) -> List[SearchHit]:
+        tiers = _resolve_tiers(content_tiers)
         try:
             with self._connection() as conn:
                 with conn.cursor() as cur:
+                    self._set_workspace_context(cur, workspace)
                     if content_type:
                         cur.execute(
                             """
@@ -434,10 +503,11 @@ class PgvectorBackend(VectorStore):
                                    filename, title, content_type, metadata
                             FROM chunks
                             WHERE workspace = %s AND content_type = %s
+                              AND content_tier = ANY(%s)
                             ORDER BY id
                             LIMIT %s
                             """,
-                            (workspace, content_type, limit),
+                            (workspace, content_type, tiers, limit),
                         )
                     else:
                         cur.execute(
@@ -447,23 +517,53 @@ class PgvectorBackend(VectorStore):
                                    filename, title, content_type, metadata
                             FROM chunks
                             WHERE workspace = %s
+                              AND content_tier = ANY(%s)
                             ORDER BY id
                             LIMIT %s
                             """,
-                            (workspace, limit),
+                            (workspace, tiers, limit),
                         )
                     return [_row_to_hit(row) for row in cur.fetchall()]
         except Exception as exc:
             logger.error("PgvectorBackend.scroll_documents failed: %s", exc)
             return []
 
-    def delete_collection(self, workspace: str) -> bool:
+    def delete_collection(self, workspace: str, content_tier: Optional[str] = None) -> bool:
         try:
             with self._connection() as conn:
                 with conn.cursor() as cur:
-                    # Cascade deletes chunks via FK ON DELETE CASCADE.
-                    cur.execute("DELETE FROM documents WHERE workspace = %s", (workspace,))
-                    cur.execute("DELETE FROM workspaces WHERE name = %s", (workspace,))
+                    self._set_workspace_context(cur, workspace)
+                    if content_tier is None:
+                        # Full wipe — historical behavior. Chunks are deleted
+                        # explicitly (not left to FK ON DELETE CASCADE) so
+                        # the delete happens under the same RLS-scoped
+                        # session context as everything else in this method,
+                        # rather than depending on cascade-trigger/RLS
+                        # interaction that we haven't verified against a
+                        # live database.
+                        cur.execute("DELETE FROM chunks WHERE workspace = %s", (workspace,))
+                        cur.execute("DELETE FROM documents WHERE workspace = %s", (workspace,))
+                        cur.execute("DELETE FROM workspaces WHERE name = %s", (workspace,))
+                    else:
+                        # Tier-scoped clear: remove only chunks in this tier,
+                        # then drop any documents left with zero chunks so
+                        # `documents` doesn't accumulate orphaned rows. The
+                        # workspace row itself is left intact — other tiers
+                        # may still have content.
+                        cur.execute(
+                            "DELETE FROM chunks WHERE workspace = %s AND content_tier = %s",
+                            (workspace, content_tier),
+                        )
+                        cur.execute(
+                            """
+                            DELETE FROM documents
+                            WHERE workspace = %s
+                              AND id NOT IN (
+                                  SELECT DISTINCT document_id FROM chunks WHERE workspace = %s
+                              )
+                            """,
+                            (workspace, workspace),
+                        )
                 conn.commit()
             return True
         except Exception as exc:
@@ -474,6 +574,10 @@ class PgvectorBackend(VectorStore):
         try:
             with self._connection() as conn:
                 with conn.cursor() as cur:
+                    # Genuinely cross-workspace enumeration — no single
+                    # workspace to scope `app.current_workspace` to, so use
+                    # the admin escape hatch instead.
+                    self._set_admin_context(cur)
                     cur.execute(
                         "SELECT DISTINCT workspace FROM chunks "
                         "UNION SELECT name FROM workspaces "
@@ -488,6 +592,12 @@ class PgvectorBackend(VectorStore):
         try:
             with self._connection() as conn:
                 with conn.cursor() as cur:
+                    self._set_workspace_context(cur, workspace)
+                    # Deliberately NOT tier-filtered: this reports total
+                    # indexed volume for the workspace (ops visibility),
+                    # across every tier including archive-only. Retrieval
+                    # safety is enforced in search()/keyword_search()/
+                    # scroll_documents(), not in this count.
                     cur.execute(
                         """
                         SELECT count(*) AS chunk_count,

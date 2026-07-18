@@ -219,6 +219,17 @@ def _is_owner_context() -> bool:
     return value in ('1', 'true', 'yes')
 
 
+def is_owner_context() -> bool:
+    """Public alias for :func:`_is_owner_context`.
+
+    Other modules (e.g. ``rag.py``'s archive-tier indexing path) need to
+    check owner context without reaching into a private helper. Kept as
+    a thin alias rather than renaming the private one, to avoid
+    disturbing existing internal call sites.
+    """
+    return _is_owner_context()
+
+
 def _is_private_repo(repo_path: str, repo_name: str) -> bool:
     """Check if a repo is a workspace-private repo per ADR-014.
 
@@ -283,17 +294,30 @@ def _build_repo_metadata(workspace_name: str, repo_path: str) -> Optional[Dict[s
         or os.path.isdir(source_datasets_dir)
     )
 
-    if not (has_instructions or has_knowledge or has_source or config):
+    # `personal-archive/` is a separate top-level directory (sibling of
+    # `source/`, `compiled/`), holding lower-priority reference/archive
+    # content. It is deliberately resolved ONLY in owner context — same
+    # sensitivity bar as the -private repos gated by RAGBOT_OWNER_CONTEXT
+    # (ADR-014). This check is independent of (and in addition to) the
+    # per-repo private-suffix filtering that already happened upstream in
+    # resolve_repo_index(): a repo need not be named `*-private` to have
+    # a personal-archive/ directory that should stay invisible by default.
+    archive_dir = os.path.join(repo_path, "personal-archive")
+    has_archive = _is_owner_context() and os.path.isdir(archive_dir)
+
+    if not (has_instructions or has_knowledge or has_source or has_archive or config):
         return None
 
     return {
         "instructions": instructions_dir if has_instructions else None,
         "datasets": knowledge_dir if has_knowledge else None,
+        "archive": archive_dir if has_archive else None,
         "repo_path": repo_path,
         "source_path": source_dir if has_source else None,
         "config": config,
         "has_instructions": has_instructions,
         "has_datasets": has_knowledge,
+        "has_archive": has_archive,
         "has_source": has_source,
     }
 
@@ -471,7 +495,10 @@ def resolve_workspace_paths(
         resolved_chain: Set of already resolved workspace names (prevents cycles)
 
     Returns:
-        Dictionary with 'instructions' and 'datasets' as lists of paths
+        Dictionary with 'instructions', 'datasets', and 'archive' as lists
+        of paths. 'archive' is only ever populated in owner context (see
+        _build_repo_metadata's has_archive gate) — in team/default context
+        it is always an empty list.
     """
     if resolved_chain is None:
         resolved_chain = set()
@@ -480,11 +507,12 @@ def resolve_workspace_paths(
     workspace_name = workspace['dir_name']
 
     if workspace_name in resolved_chain:
-        return {'instructions': [], 'datasets': []}
+        return {'instructions': [], 'datasets': [], 'archive': []}
     resolved_chain.add(workspace_name)
 
     instructions = []
     datasets = []
+    archive = []
 
     # Resolve inherited workspaces first
     inherits_from = config.get('inherits_from', [])
@@ -500,17 +528,21 @@ def resolve_workspace_paths(
                 )
                 instructions.extend(parent_paths['instructions'])
                 datasets.extend(parent_paths['datasets'])
+                archive.extend(parent_paths.get('archive', []))
 
     # Add ai-knowledge compiled content
     ai_knowledge = workspace.get('ai_knowledge', {})
     if ai_knowledge:
         ai_instructions = ai_knowledge.get('instructions')
         ai_datasets = ai_knowledge.get('datasets')
+        ai_archive = ai_knowledge.get('archive')
 
         if ai_instructions and os.path.isdir(ai_instructions):
             instructions.append(ai_instructions)
         if ai_datasets and os.path.isdir(ai_datasets):
             datasets.append(ai_datasets)
+        if ai_archive and os.path.isdir(ai_archive):
+            archive.append(ai_archive)
 
         # Fallback to source content
         source_path = ai_knowledge.get('source_path')
@@ -528,7 +560,7 @@ def resolve_workspace_paths(
                 if os.path.isdir(source_datasets):
                     datasets.append(source_datasets)
 
-    return {'instructions': instructions, 'datasets': datasets}
+    return {'instructions': instructions, 'datasets': datasets, 'archive': archive}
 
 
 def workspace_to_profile(
@@ -552,6 +584,7 @@ def workspace_to_profile(
         'dir_name': workspace['dir_name'],
         'instructions': resolved['instructions'],
         'datasets': resolved['datasets'],
+        'archive': resolved.get('archive', []),
         'ai_knowledge': workspace.get('ai_knowledge', {})
     }
 
@@ -580,7 +613,8 @@ def load_workspaces_as_profiles(ai_knowledge_root: Optional[str] = None) -> List
         'name': '(none - no workspace)',
         'dir_name': '',
         'instructions': [],
-        'datasets': []
+        'datasets': [],
+        'archive': []
     })
 
     return profiles
@@ -631,6 +665,7 @@ def get_workspace_info(workspace: Dict[str, Any]) -> WorkspaceInfo:
         inherits_from=config.get('inherits_from', []),
         has_instructions=ai_knowledge.get('has_instructions', False),
         has_datasets=ai_knowledge.get('has_datasets', False),
+        has_archive=ai_knowledge.get('has_archive', False),
         has_source=ai_knowledge.get('has_source', False),
         repo_path=ai_knowledge.get('repo_path'),
     )

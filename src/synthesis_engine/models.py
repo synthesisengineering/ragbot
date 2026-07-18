@@ -31,6 +31,7 @@ class WorkspaceInfo(BaseModel):
     inherits_from: List[str] = Field(default_factory=list)
     has_instructions: bool = False
     has_datasets: bool = False
+    has_archive: bool = False
     has_source: bool = False
     repo_path: Optional[str] = None
 

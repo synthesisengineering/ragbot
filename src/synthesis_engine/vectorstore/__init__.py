@@ -22,9 +22,37 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Retrieval tiers
+# ---------------------------------------------------------------------------
+
+# The three-tier retrieval-priority vocabulary (independent of content_type,
+# which describes WHAT the content is — datasets/runbooks/skill/etc.):
+#
+#   frequent-access  — reserved for future use. Nothing indexes into this
+#                       tier today; instructions/runbooks stay in the
+#                       system prompt by design (see CLAUDE.md).
+#   topic-specific    — the existing source/datasets/ content. Default tier
+#                       so pre-migration rows (and any caller that doesn't
+#                       pass content_tier) classify correctly with no
+#                       backfill needed.
+#   archive-only      — personal-archive/ and, in owner context, private
+#                       repos indexed under RAGBOT_OWNER_CONTEXT=1. Never
+#                       returned by default retrieval; reachable only
+#                       through an explicit content_tiers=["archive-only"]
+#                       call (see rag.search_archive()).
+CONTENT_TIERS = ("frequent-access", "topic-specific", "archive-only")
+
+# Tiers visible when a caller does not explicitly ask for specific tiers.
+# Deliberately excludes "archive-only" — this is the enforcement point for
+# "archive content is never reachable by accident." A caller must pass
+# content_tiers=["archive-only"] (or a superset including it) on purpose.
+DEFAULT_VISIBLE_CONTENT_TIERS = ("frequent-access", "topic-specific")
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +80,13 @@ class Point:
     content_type: Optional[str] = None
     source_path: Optional[str] = None
     embedding_model: str = "all-MiniLM-L6-v2"
+    # Retrieval tier — see CONTENT_TIERS above. Default matches the only
+    # tier that existed before this field was added.
+    content_tier: str = "topic-specific"
+    # Future drift-detection fields (migration 0003). Populated for new
+    # rows going forward; existing rows may have these NULL (no backfill).
+    content_hash: Optional[str] = None
+    embedding_model_version: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -94,8 +129,16 @@ class VectorStore(ABC):
         query_vector: List[float],
         limit: int = 10,
         content_type: Optional[str] = None,
+        content_tiers: Optional[Sequence[str]] = None,
     ) -> List[SearchHit]:
-        """Vector ANN search. Filters by ``content_type`` when provided."""
+        """Vector ANN search. Filters by ``content_type`` when provided.
+
+        ``content_tiers`` scopes the retrieval tier: ``None`` (default)
+        restricts to :data:`DEFAULT_VISIBLE_CONTENT_TIERS` — this is the
+        enforcement point that keeps archive-tier content out of every
+        default retrieval path. Pass an explicit sequence (e.g.
+        ``["archive-only"]``) to opt into other tiers on purpose.
+        """
 
     @abstractmethod
     def keyword_search(
@@ -104,13 +147,18 @@ class VectorStore(ABC):
         query: str,
         limit: int = 10,
         content_type: Optional[str] = None,
+        content_tiers: Optional[Sequence[str]] = None,
     ) -> List[SearchHit]:
         """Keyword / FTS search. Used for the BM25-equivalent leg of hybrid
         retrieval. Implementations without native FTS may return an empty
         list; the caller in ``rag.py`` then falls back to in-process BM25
         over scrolled chunks. Pgvector implements this via PostgreSQL's
         tsvector / ts_rank machinery, so the fallback never fires in
-        practice on Ragbot's bundled stack."""
+        practice on Ragbot's bundled stack.
+
+        ``content_tiers`` has the same default-safe-tier semantics as
+        :meth:`search`.
+        """
 
     @abstractmethod
     def scroll_documents(
@@ -118,13 +166,25 @@ class VectorStore(ABC):
         workspace: str,
         limit: int = 1000,
         content_type: Optional[str] = None,
+        content_tiers: Optional[Sequence[str]] = None,
     ) -> List[SearchHit]:
         """Iterate stored chunks (paginated). Used by find_full_document
-        and the in-process BM25 fallback."""
+        and the in-process BM25 fallback.
+
+        ``content_tiers`` has the same default-safe-tier semantics as
+        :meth:`search`.
+        """
 
     @abstractmethod
-    def delete_collection(self, workspace: str) -> bool:
-        """Remove all chunks (and documents) for a workspace."""
+    def delete_collection(self, workspace: str, content_tier: Optional[str] = None) -> bool:
+        """Remove chunks (and documents) for a workspace.
+
+        When ``content_tier`` is None (default), removes everything for
+        the workspace, including the ``workspaces`` row itself — matches
+        the historical full-wipe behavior. When given, scopes the delete
+        to chunks in that tier only (and any documents left with zero
+        remaining chunks); the workspace row is left intact.
+        """
 
     @abstractmethod
     def list_collections(self) -> List[str]:
@@ -184,6 +244,8 @@ __all__ = [
     "Point",
     "SearchHit",
     "VectorStore",
+    "CONTENT_TIERS",
+    "DEFAULT_VISIBLE_CONTENT_TIERS",
     "get_vector_store",
     "reset_vector_store",
 ]

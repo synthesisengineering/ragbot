@@ -8,7 +8,7 @@ For the prose narratives accompanying major releases, see
 [`docs/release-notes-v3.4.0.md`](docs/release-notes-v3.4.0.md) and
 the equivalents for prior versions when added.
 
-## v3.7.0 — 2026-07-18
+## v3.7.0 — 2026-07-17
 
 ### Added
 

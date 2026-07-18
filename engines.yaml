@@ -413,6 +413,24 @@ engines:
 
 default: anthropic
 
+# Embedding model for RAG chunk vectors (pgvector). This is a separate config
+# axis from the chat `engines:` above — it's a local sentence-transformers
+# model, not an LLM provider — documented here so this file stays the true
+# single source of truth for model config rather than the value living only
+# in an env var default buried in src/rag.py.
+#
+# Actual config: EMBEDDING_MODEL env var (see .env.example). Runtime default
+# when unset matches embedding.default_model below. Changing the model
+# requires a full re-index — existing chunk rows tag the model that produced
+# them (see vectorstore/migrations/0001_initial.sql), so mixing vintages in
+# one searchable index silently degrades retrieval quality.
+embedding:
+  default_model: all-MiniLM-L6-v2
+  dimensions: 384
+  provider: sentence-transformers
+  local_inference: true
+  env_var: EMBEDDING_MODEL
+
 # Preset creativity temperature settings.
 temperature_settings:
   precise: 0.25

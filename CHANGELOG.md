@@ -8,6 +8,40 @@ For the prose narratives accompanying major releases, see
 [`docs/release-notes-v3.4.0.md`](docs/release-notes-v3.4.0.md) and
 the equivalents for prior versions when added.
 
+## v3.7.0 — 2026-07-18
+
+### Added
+
+- **Content-tier retrieval metadata and an archive tier.** `chunks` gains a `content_tier`
+  column (`frequent-access` / `topic-specific` / `archive-only`), defaulting existing rows to
+  `topic-specific` (no backfill needed — that's exactly what `source/datasets/` already was),
+  plus `content_hash`/`embedding_model_version` for future drift detection. A new indexing path
+  (`ragbot index --workspace X --tier archive`, gated behind `RAGBOT_OWNER_CONTEXT=1` like the
+  existing private-repo inclusion) covers `personal-archive/`-style content that was previously
+  invisible to Ragbot entirely. Archive-tier content is excluded from the default search path —
+  reachable only through a new, separate `search_archive()` function; `get_relevant_context()`'s
+  signature and default behavior are unchanged.
+- **`ragbot mcp serve`** — a CLI entry point (stdio transport) for the previously-dormant
+  `RagbotMCPServer`, which exposes `workspace_search`/`workspace_search_multi` over pgvector to
+  MCP-aware coding agents (Claude Code, Cursor, etc.). See `docs/mcp-server-activation.md` for
+  what's still manual (bearer-token generation, client-side registration).
+- **`docs/rls-and-roles.md`** — explains the two-role database pattern below and how to verify
+  it live.
+
+### Security
+
+- **Row-Level Security on `documents`/`chunks`, with a restricted application role.** Workspace
+  isolation was previously enforced only by application code always including a `WHERE
+  workspace = %s` clause — a real gap if any future query path forgot it. RLS policies now
+  enforce this at the database level too. Getting this to actually work required a second fix
+  found only by testing against a live database: Postgres unconditionally disables RLS for
+  superuser roles (`FORCE ROW LEVEL SECURITY` does not override this), and the `ragbot` role
+  created by the standard Postgres Docker image is a superuser by default — so the policies
+  alone would have been silently inert. A new restricted `ragbot_app` role (no superuser, no
+  bypassrls, exactly the grants runtime queries need) now handles all app-level queries;
+  migrations still run under the superuser role via a separate `RAGBOT_MIGRATION_DATABASE_URL`.
+  `docker-compose.yml`/`.env.example` default to this split for local dev.
+
 ## v3.6.0 — 2026-07-14
 
 ### Changed

@@ -262,6 +262,17 @@ def create_index_parser(subparsers):
         help='Clear existing index and rebuild from scratch'
     )
     index_parser.add_argument(
+        '--tier',
+        choices=['datasets', 'archive'],
+        default='datasets',
+        help="Retrieval tier to index. 'datasets' (default) indexes "
+             "source/datasets/ as before. 'archive' indexes personal-archive/ "
+             "content into the 'archive-only' tier, which is excluded from "
+             "default retrieval and reachable only via rag.search_archive(). "
+             "Archive indexing requires RAGBOT_OWNER_CONTEXT=1 — the same "
+             "flag that already gates private-repo discovery."
+    )
+    index_parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Verbose output'
@@ -429,6 +440,41 @@ def create_agent_parser(subparsers):
     cps.set_defaults(func=run_agent_checkpoints)
 
     return agent_parser
+
+
+def create_mcp_parser(subparsers):
+    """Create the `mcp` subcommand parser.
+
+    Exposes RagbotMCPServer (synthesis_engine.mcp_server) — the SERVER
+    side of MCP, where Ragbot's own primitives (workspace_search,
+    workspace_search_multi, document_get, skill_run, agent_run_start) are
+    surfaced to an external MCP client such as Claude Code or Cursor. This
+    is distinct from synthesis_engine.mcp, the CLIENT side (Ragbot calling
+    OUT to other MCP servers), which is managed via the `/api/mcp/*`
+    endpoints instead.
+
+    Only the `serve` subcommand exists today (stdio transport, the
+    transport Claude Code and other desktop MCP clients speak for local
+    servers). See docs/mcp-server-activation.md for what a user needs to
+    do to actually register this with a client — this command starts the
+    server; it does not register itself anywhere.
+    """
+    mcp_parser = subparsers.add_parser(
+        'mcp',
+        help='Run Ragbot as an MCP server for other agents to call',
+        description='Serve RagbotMCPServer, exposing workspace_search, '
+                    'workspace_search_multi, document_get, skill_run, and '
+                    'agent_run_start as MCP tools to an external client.'
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(dest='mcp_command', required=True)
+
+    serve_parser = mcp_subparsers.add_parser(
+        'serve',
+        help='Serve over stdio in the foreground (blocks until the client disconnects).',
+    )
+    serve_parser.set_defaults(func=run_mcp_serve)
+
+    return mcp_parser
 
 
 def _agent_checkpoint_store():
@@ -1363,6 +1409,48 @@ def _dispatch_activated_skill(activated, inputs, model_override):
     return 0
 
 
+def run_mcp_serve(args):
+    """Run `ragbot mcp serve` — start RagbotMCPServer over stdio, foreground.
+
+    Wires a real ServerDependencies from live substrate singletons (see
+    synthesis_engine.mcp_server.wiring.build_default_dependencies) and
+    blocks on stdin/stdout until the client disconnects or the process
+    receives an interrupt. Stdio is process-local: whatever spawned this
+    process (Claude Code, Cursor, etc.) is the trust boundary — no bearer
+    token is consulted, matching RagbotMCPServer.serve_stdio()'s contract.
+
+    This command does not register itself with any client — see
+    docs/mcp-server-activation.md for what a user needs to do to actually
+    point Claude Code (or another MCP client) at this command.
+    """
+    import asyncio
+
+    try:
+        from synthesis_engine.mcp_server import RagbotMCPServer
+        from synthesis_engine.mcp_server.wiring import build_default_dependencies
+    except Exception as e:
+        print(f"MCP server unavailable: {e}", file=sys.stderr)
+        return 1
+
+    try:
+        dependencies = build_default_dependencies()
+    except Exception as e:
+        print(f"Failed to wire MCP server dependencies: {e}", file=sys.stderr)
+        return 1
+
+    server = RagbotMCPServer(dependencies)
+    print(
+        "Ragbot MCP server starting (stdio transport). "
+        "Press Ctrl-C or close the client connection to stop.",
+        file=sys.stderr,
+    )
+    try:
+        asyncio.run(server.serve_stdio())
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 def run_db_status(args):
     """Print backend health and indexed collections.
 
@@ -1784,21 +1872,32 @@ def run_index(args):
 
     Reads source files directly from ai-knowledge repositories and indexes
     them into pgvector for RAG retrieval. No intermediate compiled files needed.
+
+    ``--tier archive`` indexes personal-archive/ content into the
+    'archive-only' retrieval tier instead of the default 'topic-specific'
+    tier used for source/datasets/. The two tiers are independently
+    force-clearable: `--force` only wipes the tier being indexed in this
+    invocation, never the other tier's content in the same workspace.
     """
     import time
 
     workspace_name = args.workspace
+    tier = getattr(args, 'tier', 'datasets')
 
     if args.verbose:
-        print(f"Indexing workspace: {workspace_name}")
+        print(f"Indexing workspace: {workspace_name} (tier={tier})")
         if args.force:
-            print("Force mode: clearing existing index first")
+            print(f"Force mode: clearing existing '{tier}' index first")
 
     start_time = time.time()
 
     try:
-        from rag import index_workspace_by_name
-        indexed = index_workspace_by_name(workspace_name, force=args.force)
+        if tier == 'archive':
+            from rag import index_workspace_archive_by_name
+            indexed = index_workspace_archive_by_name(workspace_name, force=args.force)
+        else:
+            from rag import index_workspace_by_name
+            indexed = index_workspace_by_name(workspace_name, force=args.force)
     except Exception as e:
         print(f"Indexing error: {e}", file=sys.stderr)
         if args.verbose:
@@ -1808,7 +1907,8 @@ def run_index(args):
 
     elapsed = time.time() - start_time
 
-    print(f"Indexed {indexed} documents for workspace '{workspace_name}' in {elapsed:.2f}s")
+    print(f"Indexed {indexed} documents for workspace '{workspace_name}' "
+          f"(tier={tier}) in {elapsed:.2f}s")
     return 0
 
 
@@ -1841,6 +1941,7 @@ def main():
     create_db_parser(subparsers)
     create_memory_parser(subparsers)
     create_agent_parser(subparsers)
+    create_mcp_parser(subparsers)
 
     # Parse arguments
     args = parser.parse_args()

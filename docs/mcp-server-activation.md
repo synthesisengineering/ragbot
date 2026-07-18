@@ -34,7 +34,7 @@ Claude Code's local (stdio) MCP servers are registered either via `claude mcp ad
       "command": "ragbot",
       "args": ["mcp", "serve"],
       "env": {
-        "RAGBOT_DATABASE_URL": "postgresql://ragbot:<password>@localhost:5433/ragbot"
+        "RAGBOT_DATABASE_URL": "postgresql://ragbot_app:<password>@localhost:5433/ragbot"
       }
     }
   }
@@ -42,6 +42,8 @@ Claude Code's local (stdio) MCP servers are registered either via `claude mcp ad
 ```
 
 Adjust `command` to an absolute path (or activate the right virtualenv/interpreter) if `ragbot` isn't on `PATH` in the environment Claude Code spawns from. Set any other env vars the process needs to resolve workspaces the same way the CLI does (`RAGBOT_OWNER_CONTEXT=1` if you want private-repo and archive-tier content reachable through `workspace_search`/`workspace_search_multi` — see the caveat below).
+
+`RAGBOT_DATABASE_URL` above should point at the restricted `ragbot_app` role, not the Postgres superuser role — see [`docs/rls-and-roles.md`](rls-and-roles.md) for why that split exists and matters even for a read-mostly consumer like this MCP server.
 
 Exact registration mechanics (CLI flag vs. hand-edited JSON, project-scope vs. user-scope) are Claude Code's own concern and may vary by version — this is the one step in this document that's a live action for the user to perform and verify against their installed Claude Code version, not something this change can pre-validate.
 

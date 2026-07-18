@@ -54,7 +54,24 @@ services:
     ports:
       - "8000:8000"
     environment:
-      RAGBOT_DATABASE_URL: ${RAGBOT_DATABASE_URL:-postgresql://ragbot:ragbot_dev_password_change_me@postgres:5432/ragbot}
+      # Application runtime DSN — used for every query the app issues at
+      # request time (search/upsert/memory ops). Points at the restricted
+      # `ragbot_app` role (created idempotently by migration
+      # 0003_content_tiers.sql), NOT the superuser `POSTGRES_USER` role, so
+      # the row-level-security policies on documents/chunks are actually
+      # enforced rather than silently bypassed (Postgres unconditionally
+      # disables RLS for superusers — see docs/rls-and-roles.md).
+      RAGBOT_DATABASE_URL: ${RAGBOT_DATABASE_URL:-postgresql://ragbot_app:ragbot_app_dev_password_change_me@postgres:5432/ragbot}
+      # Elevated DSN used ONLY to apply migrations (CREATE ROLE, ALTER
+      # TABLE ... ENABLE/FORCE ROW LEVEL SECURITY, CREATE EXTENSION,
+      # schema-level GRANTs) — the superuser role docker's postgres image
+      # creates from POSTGRES_USER/POSTGRES_PASSWORD.
+      RAGBOT_MIGRATION_DATABASE_URL: ${RAGBOT_MIGRATION_DATABASE_URL:-postgresql://ragbot:ragbot_dev_password_change_me@postgres:5432/ragbot}
+      # Password provisioned for the `ragbot_app` role the first time
+      # migrations run (must match the password embedded in
+      # RAGBOT_DATABASE_URL above). See migration 0003_content_tiers.sql /
+      # pgvector_backend.py::_resolve_app_role_password.
+      RAGBOT_APP_DB_PASSWORD: ${RAGBOT_APP_DB_PASSWORD:-ragbot_app_dev_password_change_me}
       # Point LiteLLM at a host-side Ollama daemon (the container's own
       # localhost is the container, not the host). host.docker.internal is
       # the canonical hostname for the host on Docker Desktop (macOS,

@@ -61,6 +61,21 @@
 --   Neither GUC is set by default, so an un-scoped connection sees
 --   nothing from either table — fail-closed.
 --
+-- * **Restricted `ragbot_app` role — makes the RLS policies above mean
+--   something.** PostgreSQL has a hard, non-configurable rule: row
+--   security is always disabled for superusers, and `FORCE ROW LEVEL
+--   SECURITY` does NOT override this — FORCE only affects table owners
+--   that are NOT superusers. The official postgres/pgvector docker
+--   images create `POSTGRES_USER` as a superuser, so an application that
+--   serves its runtime queries through that same role gets every policy
+--   above for free... as a silent no-op, regardless of how carefully the
+--   policies are written. This migration creates a dedicated, non-
+--   superuser, non-bypassrls role for exactly that runtime connection,
+--   distinct from the elevated role migrations run as. See
+--   `pgvector_backend.py` (`dsn` vs `migration_dsn`) and
+--   `docs/rls-and-roles.md` for the full explanation and the env vars
+--   that wire it up.
+--
 -- Idempotent: every ALTER/CREATE uses IF NOT EXISTS or an existence
 -- check; constraints and policies are dropped-and-recreated by name so
 -- re-running this migration is safe.
@@ -124,6 +139,73 @@ CREATE POLICY chunks_workspace_isolation ON chunks
 DROP POLICY IF EXISTS chunks_admin_bypass ON chunks;
 CREATE POLICY chunks_admin_bypass ON chunks
     USING (current_setting('app.rls_admin', true) = 'on');
+
+-- ---------------------------------------------------------------------------
+-- Restricted application role — the RLS policies above are meaningless
+-- unless the app's RUNTIME connection actually goes through a role that is
+-- subject to them.
+-- ---------------------------------------------------------------------------
+--
+-- Never connect the application's runtime queries (search/upsert/memory
+-- reads-writes) through the migration/owner role. That role is expected to
+-- be a Postgres superuser in most local/dev setups (the official
+-- postgres/pgvector docker images make POSTGRES_USER one), and row
+-- security is unconditionally disabled for superusers — FORCE ROW LEVEL
+-- SECURITY above does not and cannot change that.
+--
+-- The password is never hardcoded here. `__RAGBOT_APP_DB_PASSWORD__` is a
+-- placeholder substituted by the migration runner
+-- (`_substitute_migration_secrets` / `_resolve_app_role_password` in
+-- pgvector_backend.py) with the value of the `RAGBOT_APP_DB_PASSWORD` env
+-- var (or a randomly generated value, logged loudly, if that env var is
+-- unset) before this file's text ever reaches the database. Only ever
+-- created, never password-reset here, so re-running this migration after
+-- the role already exists is a safe no-op — rotate the password with
+-- `ALTER ROLE` directly if it ever needs to change.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ragbot_app') THEN
+        CREATE ROLE ragbot_app LOGIN PASSWORD __RAGBOT_APP_DB_PASSWORD__
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+    END IF;
+END $$;
+
+-- Connectivity + schema usage. GRANT is idempotent (re-granting an
+-- already-held privilege is a no-op, not an error), so this is safe to
+-- re-run alongside everything else in this file.
+DO $$
+BEGIN
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO ragbot_app', current_database());
+END $$;
+GRANT USAGE ON SCHEMA public TO ragbot_app;
+
+-- Exactly the privileges the app's runtime queries need, and nothing
+-- more: no DDL, no role/extension management, no other schemas. Every
+-- table the app reads/writes at runtime is listed explicitly (rather than
+-- relying solely on ALL TABLES IN SCHEMA, which would also sweep in
+-- schema_migrations) — see pgvector_backend.py (documents/chunks/
+-- workspaces) and synthesis_engine/memory/pgvector_memory.py (entities/
+-- relations/session_memory/user_memory) for the call sites that justify
+-- this exact list.
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+    workspaces, documents, chunks, entities, relations, session_memory, user_memory
+    TO ragbot_app;
+
+-- documents.id / chunks.id are BIGSERIAL (backed by an implicit sequence);
+-- INSERT ... RETURNING id needs USAGE on that sequence for nextval(). The
+-- other tables use UUID/TEXT primary keys with no backing sequence.
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ragbot_app;
+
+-- Default privileges so a FUTURE migration's new tables/sequences are
+-- automatically usable by ragbot_app without a separate GRANT statement
+-- in that migration. Scoped implicitly to whichever role executes this
+-- ALTER DEFAULT PRIVILEGES statement (i.e. whatever role runs
+-- migrations), which is exactly the role that will create those future
+-- objects.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ragbot_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO ragbot_app;
 
 -- Record migration as applied.
 INSERT INTO schema_migrations (version, description)

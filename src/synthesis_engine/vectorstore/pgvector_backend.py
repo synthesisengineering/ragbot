@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import secrets
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -46,7 +47,15 @@ def _resolve_tiers(content_tiers: Optional[Sequence[str]]) -> List[str]:
 
 
 def _resolve_database_url() -> Optional[str]:
-    """Resolve the connection string from env vars.
+    """Resolve the APPLICATION (runtime) connection string from env vars.
+
+    This is the DSN used for every query the app issues at runtime —
+    search, upsert, memory reads/writes, everything except applying
+    migrations. In any deployment that has adopted the RLS hardening in
+    ``0003_content_tiers.sql``, this should point at the restricted,
+    non-superuser ``ragbot_app`` role that migration creates — see
+    ``docs/rls-and-roles.md``. Migrations themselves run over a separate,
+    intentionally more-privileged DSN; see ``_resolve_migration_database_url``.
 
     Priority:
       1. ``RAGBOT_DATABASE_URL``  (preferred — explicit, ragbot-scoped)
@@ -57,6 +66,83 @@ def _resolve_database_url() -> Optional[str]:
         os.environ.get("RAGBOT_DATABASE_URL")
         or os.environ.get("DATABASE_URL")
     )
+
+
+def _resolve_migration_database_url() -> Optional[str]:
+    """Resolve the ELEVATED connection string used to apply migrations.
+
+    Migrations need privileges the restricted ``ragbot_app`` runtime role
+    deliberately does not have: ``CREATE ROLE``, ``ALTER TABLE ... ENABLE/
+    FORCE ROW LEVEL SECURITY``, ``CREATE EXTENSION``, schema-level GRANTs.
+    Reusing the app's runtime DSN for migrations would either fail outright
+    (once that role is genuinely restricted) or — on a fresh database —
+    be a chicken-and-egg problem, since the restricted role doesn't exist
+    until a migration creates it.
+
+    Falls back to the application DSN (`_resolve_database_url`) when unset,
+    which reproduces today's single-DSN behavior for setups that haven't
+    split the two roles yet (including a brand-new database where
+    ``RAGBOT_DATABASE_URL`` itself must be the elevated/owner role, since
+    nothing else can create ``ragbot_app`` for the first time).
+    """
+
+    return os.environ.get("RAGBOT_MIGRATION_DATABASE_URL") or _resolve_database_url()
+
+
+# Placeholder token embedded in migration SQL (see 0003_content_tiers.sql)
+# where the `ragbot_app` role's password needs to be substituted at
+# apply-time. Migrations are executed as plain multi-statement SQL text
+# (see `_run_migrations`), not through psycopg's parameter binding, so a
+# secret a migration needs can't be passed as a normal bind parameter —
+# this is the mechanism instead.
+_APP_ROLE_PASSWORD_PLACEHOLDER = "__RAGBOT_APP_DB_PASSWORD__"
+
+
+def _resolve_app_role_password() -> str:
+    """Resolve the password to provision for the restricted `ragbot_app`
+    Postgres role created idempotently by migration 0003.
+
+    Read from ``RAGBOT_APP_DB_PASSWORD`` so operators can keep it in sync
+    with the connection string ``RAGBOT_DATABASE_URL`` should use in any
+    real deployment (docker-compose.yml and .env.example derive both from
+    the same value). If unset, a random password is generated so the role
+    is still created with a working — if unknown — credential rather than
+    a predictable one. Nothing will be able to log in as ``ragbot_app``
+    until ``RAGBOT_APP_DB_PASSWORD`` and ``RAGBOT_DATABASE_URL`` are set to
+    match, so this path logs loudly rather than silently degrading.
+    """
+
+    pw = os.environ.get("RAGBOT_APP_DB_PASSWORD")
+    if pw:
+        return pw
+    generated = secrets.token_urlsafe(24)
+    logger.warning(
+        "RAGBOT_APP_DB_PASSWORD is not set; generated a random password for "
+        "the 'ragbot_app' restricted role created by migration "
+        "0003_content_tiers.sql. Set RAGBOT_APP_DB_PASSWORD explicitly (and "
+        "point RAGBOT_DATABASE_URL at postgresql://ragbot_app:<that "
+        "password>@.../<db>) so the row-level-security hardening actually "
+        "applies to the app's runtime connection — see docs/rls-and-roles.md."
+    )
+    return generated
+
+
+def _substitute_migration_secrets(sql: str, conn) -> str:
+    """Replace secret placeholders in migration SQL with real values.
+
+    Currently the only placeholder is `_APP_ROLE_PASSWORD_PLACEHOLDER`. A
+    no-op (returns ``sql`` unchanged) for every migration file that doesn't
+    reference it, which is all of them except 0003_content_tiers.sql.
+    """
+
+    if _APP_ROLE_PASSWORD_PLACEHOLDER not in sql:
+        return sql
+
+    from psycopg import sql as psycopg_sql  # local import, mirrors _to_jsonb style
+
+    password = _resolve_app_role_password()
+    literal = psycopg_sql.Literal(password).as_string(conn)
+    return sql.replace(_APP_ROLE_PASSWORD_PLACEHOLDER, literal)
 
 
 def _migrations_dir() -> Path:
@@ -71,8 +157,21 @@ def _migrations_dir() -> Path:
 class PgvectorBackend(VectorStore):
     backend_name = "pgvector"
 
-    def __init__(self, dsn: str, *, min_size: int = 1, max_size: int = 8) -> None:
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        migration_dsn: Optional[str] = None,
+        min_size: int = 1,
+        max_size: int = 8,
+    ) -> None:
+        # `dsn` is the APPLICATION (runtime) connection string — everything
+        # the app pool serves (search/upsert/memory ops). `migration_dsn` is
+        # the ELEVATED connection string migrations run over; it defaults to
+        # `dsn` so a single-DSN setup (no role split configured) keeps
+        # working exactly as before. See `_resolve_migration_database_url`.
         self.dsn = dsn
+        self.migration_dsn = migration_dsn or dsn
         self._pool = None
         self._pool_lock = threading.Lock()
         self._migrated = False
@@ -94,12 +193,19 @@ class PgvectorBackend(VectorStore):
                 "Set it to a postgres:// connection string and ensure the "
                 "pgvector extension is installable on the target server."
             )
-        backend = cls(dsn)
-        # Eagerly validate connectivity + run migrations. Fail fast if the
-        # database is unreachable so get_vector_store() returns None and
-        # callers in rag.py degrade to chat-only without RAG.
-        backend._ensure_pool()
+        migration_dsn = _resolve_migration_database_url()
+        backend = cls(dsn, migration_dsn=migration_dsn)
+        # Migrations MUST run before the app pool is opened: on a fresh
+        # database (or the first run after adopting the RLS hardening in
+        # 0003_content_tiers.sql), the restricted `ragbot_app` role that
+        # `dsn` may point at doesn't exist yet — only the migration
+        # (running over the elevated `migration_dsn`) creates it. Opening
+        # the app pool first would fail to authenticate.
         backend._run_migrations()
+        # Eagerly validate app-pool connectivity. Fail fast if the database
+        # is unreachable so get_vector_store() returns None and callers in
+        # rag.py degrade to chat-only without RAG.
+        backend._ensure_pool()
         return backend
 
     # ------------------------------------------------------------------
@@ -152,10 +258,23 @@ class PgvectorBackend(VectorStore):
             logger.warning("No migrations found for pgvector backend.")
             self._migrated = True
             return
-        with self._connection() as conn:
+
+        import psycopg  # local import: keep module importable without psycopg installed
+
+        # Migrations run over a DEDICATED, non-pooled connection using the
+        # elevated `migration_dsn` — deliberately NOT the shared app pool
+        # (`self._connection()` / `self.dsn`). In any deployment that has
+        # adopted the RLS hardening below, the app pool connects as the
+        # restricted `ragbot_app` role, which lacks the privileges these
+        # migrations need (CREATE ROLE, ALTER TABLE ... ENABLE/FORCE ROW
+        # LEVEL SECURITY, CREATE EXTENSION) — and on a fresh database,
+        # `ragbot_app` doesn't exist yet for the pool to even authenticate
+        # as until this method's first run creates it.
+        with psycopg.connect(self.migration_dsn, autocommit=False) as conn:
             with conn.cursor() as cur:
                 for path in migrations:
                     sql = path.read_text()
+                    sql = _substitute_migration_secrets(sql, conn)
                     logger.info("Applying migration %s", path.name)
                     cur.execute(sql)
             conn.commit()

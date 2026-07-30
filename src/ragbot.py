@@ -293,7 +293,8 @@ def create_skills_parser(subparsers):
         description='Manage Agent Skills (directories with SKILL.md) for RAG '
                     'indexing, inspection, and workspace-scoped execution. '
                     'Skills are discovered from ~/.synthesis/skills, '
-                    '~/.claude/skills, plugin caches, and per-workspace '
+                    '~/.claude/skills, ~/.agents/skills, both client plugin '
+                    'caches, and per-workspace '
                     'collections under ~/workspaces/<W>/synthesis-skills-<W>/.'
     )
     skills_subparsers = skills_parser.add_subparsers(dest='skills_command', required=True)
@@ -1120,11 +1121,13 @@ def run_skills_list(args):
     if not skills:
         if workspace is not None:
             print(f"No skills visible from workspace '{workspace}'. "
-                  f"Searched ~/.synthesis/skills, ~/.claude/skills, plugin caches, "
+                  f"Searched ~/.synthesis/skills, ~/.claude/skills, "
+                  f"~/.agents/skills, both client plugin caches, "
                   f"and per-workspace collections.")
         else:
             print("No skills discovered. Searched ~/.synthesis/skills, "
-                  "~/.claude/skills, plugin caches, and per-workspace collections.")
+                  "~/.claude/skills, ~/.agents/skills, both client plugin "
+                  "caches, and per-workspace collections.")
         return 0
 
     # Legacy verbose layout (preserved for back-compat with the previous

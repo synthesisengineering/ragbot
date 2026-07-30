@@ -6,16 +6,21 @@ module walks those locations and returns parsed :class:`Skill` objects.
 Discovery sources, in order (later entries override earlier ones on
 name collision):
 
-    1. Synthesis-engineering shared install:  ``~/.synthesis/skills/``.
-    2. Claude Code private skills:            ``~/.claude/skills/``.
-    3. Plugin-installed skills:               ``~/.claude/plugins/cache/<vendor>/skills/``.
-    4. Per-personal-workspace open-source checkout, one per workspace
+    1. Bundled starter pack.
+    2. Synthesis-engineering shared install:  ``~/.synthesis/skills/``.
+    3. Claude Code private skills:            ``~/.claude/skills/``.
+    4. Codex/agent-neutral private skills:    ``~/.agents/skills/``.
+    5. Claude Code plugin caches:
+       ``~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/``.
+    6. Codex plugin caches:
+       ``~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/skills/``.
+    7. Per-personal-workspace open-source checkout, one per workspace
        declared in ``~/.synthesis/identity.yaml`` under
        ``personal_workspaces``:                ``~/workspaces/<personal>/synthesis-skills/``.
-    5. Per-workspace skill collections (glob): ``~/workspaces/<W>/synthesis-skills-<W>/``.
+    8. Per-workspace skill collections (glob): ``~/workspaces/<W>/synthesis-skills-<W>/``.
        Scope is workspace-derived; when ``<W>`` is in ``personal_workspaces``
        the identity-aware path convention collapses the scope to universal.
-    6. Caller-supplied extra roots (compile-config, tests, ...).
+    9. Caller-supplied extra roots (compile-config, tests, ...).
 
 Within each root we treat any direct subdirectory containing ``SKILL.md``
 as a skill. Nested layouts under those subdirectories are inspected by
@@ -64,43 +69,63 @@ def _default_skill_roots() -> Tuple[str, ...]:
     1. Bundled starter pack                      ``synthesis_engine.skills.starter_pack``
     2. Synthesis-engineering shared install      ``~/.synthesis/skills/``
     3. Claude Code private skills                ``~/.claude/skills/``
-    4. Per-personal-workspace open-source clones derived from
-       ``~/.synthesis/identity.yaml`` (one entry per workspace declared
-       under ``personal_workspaces``)
+    4. Codex/agent-neutral private skills       ``~/.agents/skills/``
 
-    The starter pack appears first so any operator-installed skill with
-    the same name overrides it (later roots win on collision per
-    :func:`discover_skills`). Per-workspace skill collections at
-    ``~/workspaces/<W>/synthesis-skills-<W>/`` are picked up by the
-    workspace glob (see :func:`_expand_workspace_globs`), not by this
-    chain; the identity-aware path-convention rule in
+    The starter pack appears first so any operator-installed skill with the
+    same name overrides it. Codex/agent-neutral private skills intentionally
+    follow Claude Code private skills, so the agent-neutral deployment wins if
+    installed copies drift (later roots win on collision per
+    :func:`discover_skills`). Personal source checkouts and per-workspace
+    skill collections at ``~/workspaces/<W>/synthesis-skills-<W>/`` are
+    picked up by the runtime helpers rather than this base chain; the
+    identity-aware path-convention rule in
     :class:`SkillScope.from_path_convention` decides whether each one is
     universal (for personal workspaces) or workspace-scoped.
     """
-    from ..identity import get_personal_workspaces  # lazy: avoid import cycle
     from .starter_pack import starter_pack_root  # lazy: keep import surface flat
 
     home = Path.home()
-    chain: List[str] = [
+    return (
         starter_pack_root(),
         str(home / ".synthesis" / "skills"),
         str(home / ".claude" / "skills"),
-    ]
+        str(home / ".agents" / "skills"),
+    )
+
+
+def _personal_skill_roots() -> Tuple[str, ...]:
+    """Return source checkouts for every configured personal workspace."""
+    from ..identity import get_personal_workspaces  # lazy: avoid import cycle
+
+    home = Path.home()
+    roots: List[str] = []
     for personal in get_personal_workspaces():
-        # The open-source synthesis-skills repo cloned under the
-        # operator's workspace (no ``-<workspace>`` suffix) holds
-        # universally-scoped skills.
-        chain.append(str(home / "workspaces" / personal / "synthesis-skills"))
-    return tuple(chain)
+        roots.append(str(home / "workspaces" / personal / "synthesis-skills"))
+    return tuple(roots)
 
 
 DEFAULT_SKILL_ROOTS = _default_skill_roots()
 
 
-# Glob for plugin-installed skills. We resolve at runtime because vendor
-# directories vary by installation.
-def _plugin_skill_glob() -> str:
-    return str(Path.home() / ".claude" / "plugins" / "cache" / "*" / "skills")
+# Globs for plugin-installed skills. Both clients use a
+# marketplace/plugin/version/skills cache layout. We resolve at runtime
+# because marketplace, plugin, and version directories vary by installation.
+def _plugin_skill_globs() -> Tuple[str, ...]:
+    home = Path.home()
+    claude_cache = home / ".claude" / "plugins" / "cache"
+    codex_cache = home / ".codex" / "plugins" / "cache"
+    return (
+        str(claude_cache / "*" / "*" / "*" / "skills"),
+        str(codex_cache / "*" / "*" / "*" / "skills"),
+    )
+
+
+def _expand_plugin_skill_globs() -> List[str]:
+    """Return deterministic installed-plugin skill roots for both clients."""
+    roots: List[str] = []
+    for pattern in _plugin_skill_globs():
+        roots.extend(sorted(glob.glob(pattern)))
+    return roots
 
 
 # Glob for per-workspace skill collections. The directory-name pattern is
@@ -108,9 +133,6 @@ def _plugin_skill_glob() -> str:
 # is taken as scoped to workspace ``<W>``. Matched at runtime via glob.
 def _workspace_skill_glob() -> str:
     return str(Path.home() / "workspaces" / "*" / "synthesis-skills-*")
-
-
-_PLUGIN_SKILL_GLOB = _plugin_skill_glob()
 
 
 def _expand_workspace_globs() -> List[str]:
@@ -153,7 +175,8 @@ def resolve_skill_roots(extra: Optional[Iterable[str]] = None) -> List[str]:
     candidates: List[str] = []
     # Recompute defaults each call so monkeypatched homes are honoured.
     candidates.extend(_default_skill_roots())
-    candidates.extend(glob.glob(_plugin_skill_glob()))
+    candidates.extend(_expand_plugin_skill_globs())
+    candidates.extend(_personal_skill_roots())
     candidates.extend(_expand_workspace_globs())
     if extra:
         candidates.extend(os.path.expanduser(p) for p in extra)

@@ -83,6 +83,16 @@ def _new_manager(tmp_path: Path, **kwargs) -> BackgroundTaskManager:
     return BackgroundTaskManager(state_dir=tmp_path / "tasks", **kwargs)
 
 
+def test_default_state_dir_honors_environment(tmp_path, monkeypatch):
+    target = tmp_path / "isolated-tasks"
+    monkeypatch.setenv("SYNTHESIS_TASK_DIR", str(target))
+
+    manager = BackgroundTaskManager()
+
+    assert manager.state_dir == target
+    assert target.is_dir()
+
+
 # ---------------------------------------------------------------------------
 # BackgroundTaskManager — happy and unhappy paths
 # ---------------------------------------------------------------------------

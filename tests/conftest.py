@@ -125,3 +125,28 @@ def _hermetic_synthesis_identity(monkeypatch, tmp_path_factory):
     """Default SYNTHESIS_IDENTITY_CONFIG to a missing path for all tests."""
     bogus = tmp_path_factory.mktemp("no_identity") / "missing.yaml"
     monkeypatch.setenv("SYNTHESIS_IDENTITY_CONFIG", str(bogus))
+
+
+# ---------------------------------------------------------------------------
+# Synthesis runtime state — hermetic test default
+# ---------------------------------------------------------------------------
+#
+# Production task and agent-checkpoint state belongs under ~/.synthesis.
+# Tests must never write to that live control plane: it makes outcomes depend
+# on filesystem permissions and leaves test task records mixed with real ones.
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_synthesis_runtime_state(monkeypatch, tmp_path):
+    """Redirect task and checkpoint state and reset the task singleton."""
+    monkeypatch.setenv("SYNTHESIS_TASK_DIR", str(tmp_path / "tasks"))
+    monkeypatch.setenv(
+        "SYNTHESIS_AGENT_CHECKPOINT_DIR",
+        str(tmp_path / "agent-checkpoints"),
+    )
+
+    from synthesis_engine.tasks import set_default_manager
+
+    set_default_manager(None)
+    yield
+    set_default_manager(None)

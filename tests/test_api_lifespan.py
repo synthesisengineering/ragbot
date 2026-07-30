@@ -125,14 +125,13 @@ def _reset_substrate_singletons(monkeypatch):
 def _isolated_state_dir(tmp_path, monkeypatch):
     """Point the BackgroundTaskManager's default state dir at a tmp path.
 
-    The default manager reads ``~/.synthesis/tasks``; redirecting HOME is
-    the cleanest way to isolate it without monkey-patching the manager
-    constructor. We point ``HOME`` (and the legacy ``XDG_DATA_HOME``) at
-    ``tmp_path`` so the substrate's ``Path.home()`` calls land there.
+    The default manager honors ``SYNTHESIS_TASK_DIR`` specifically so tests
+    can isolate task state without changing every unrelated home-directory
+    lookup in the process.
     """
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
-    return tmp_path / ".synthesis" / "tasks"
+    state_dir = tmp_path / "tasks"
+    monkeypatch.setenv("SYNTHESIS_TASK_DIR", str(state_dir))
+    return state_dir
 
 
 def _build_app_with_lifespan() -> FastAPI:

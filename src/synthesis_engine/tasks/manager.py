@@ -5,6 +5,8 @@ Design contract
 
 A task's lifecycle is recorded as an append-only JSONL stream at
 ``~/.synthesis/tasks/{task_id}.jsonl`` (one line per state transition).
+Tests and isolated runtimes can redirect the root with
+``SYNTHESIS_TASK_DIR``.
 The newest line determines the current state; every previous line is
 preserved as the transition history. The stream is the SINGLE SOURCE
 OF TRUTH on disk; the in-memory dictionary is a cache that lets the
@@ -239,6 +241,9 @@ class TaskHandle:
 
 
 def _default_state_dir() -> Path:
+    override = os.environ.get("SYNTHESIS_TASK_DIR")
+    if override:
+        return Path(override).expanduser()
     return Path.home() / ".synthesis" / "tasks"
 
 
@@ -336,6 +341,11 @@ class BackgroundTaskManager:
         self._lock = threading.Lock()
 
     # ----- public API --------------------------------------------------------
+
+    @property
+    def state_dir(self) -> Path:
+        """Directory that owns this manager's durable task streams."""
+        return self._state_dir
 
     def start_task(
         self,

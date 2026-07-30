@@ -6,8 +6,8 @@ When ``RAGBOT_DEMO=1`` (or ``true``/``yes``), ragbot:
   and ignores everything else (the user's ``~/.synthesis/console.yaml``,
   the ``~/workspaces/*/ai-knowledge-*`` glob, legacy flat parents).
 * Discovers exactly one skill root — the bundled ``demo/skills/`` —
-  and ignores ``~/.synthesis/skills``, ``~/.claude/skills``, and plugin
-  caches.
+  and ignores ``~/.synthesis/skills``, ``~/.claude/skills``,
+  ``~/.agents/skills``, and both clients' plugin caches.
 * Reports ``demo_mode: true`` from ``/health`` and ``/api/config`` so the
   Web UI can render an unmistakable banner.
 

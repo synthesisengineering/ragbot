@@ -221,8 +221,17 @@ class TestChatEndpoint:
         # May fail due to no API key, but should pass validation
         assert response.status_code in [200, 500, 401]
 
-    def test_chat_stream_returns_event_stream(self, client):
+    def test_chat_stream_returns_event_stream(self, client, monkeypatch):
         """Streaming chat should return event stream content type."""
+        import importlib
+
+        chat_router = importlib.import_module("api.routers.chat")
+        monkeypatch.setattr(
+            chat_router,
+            "chat_stream",
+            lambda *args, **kwargs: iter(["hello"]),
+        )
+
         response = client.post("/api/chat", json={
             "prompt": "Hello",
             "model": "anthropic/claude-sonnet-4-5-20250929",

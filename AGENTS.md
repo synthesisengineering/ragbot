@@ -1,4 +1,4 @@
-# Claude Code Context: ragbot
+# Repository Context: ragbot
 
 ## Repository: ragbot (PUBLIC)
 
@@ -115,8 +115,9 @@ Ragbot reads Agent Skills (directories containing `SKILL.md`) as first-class con
 Discovery sources, in priority order (later wins on name collision):
 1. `~/.synthesis/skills/` (synthesis-engineering shared install)
 2. `~/.claude/skills/` (Claude Code private skills)
-3. `~/.claude/plugins/cache/<vendor>/skills/` (plugin-installed skills)
-4. Per-workspace skill roots declared in compile-config.yaml `sources.skills.roots`
+3. `~/.agents/skills/` (Codex and agent-neutral private skills)
+4. Installed Claude Code and Codex plugin caches
+5. Per-workspace skill roots declared in compile-config.yaml `sources.skills.roots`
 
 A skill's full directory tree is honored:
 - `SKILL.md` — canonical entry point (frontmatter + body).
@@ -134,7 +135,7 @@ sources:
     path: ./source
   skills:
     enabled: true
-    roots: []                 # extra roots beyond ~/.synthesis/skills, ~/.claude/skills
+    roots: []                 # extra roots beyond shared, private, and plugin installs
     include: ["synthesis-*"]  # optional name-glob whitelist
     exclude: []
     include_references: true        # default true
@@ -241,7 +242,7 @@ If `engines.yaml` has a model configured, it was added intentionally by the user
 
 **Models in engines.yaml should ONLY move forward, NEVER backward.**
 - If the user ever wants to downgrade a model, THEY will do it manually
-- Claude should NEVER downgrade models, even if they appear broken
+- No agent should downgrade models, even if they appear broken
 - When a model doesn't work, the issue is in the code/API configuration, NOT the model
 
 **If you need to update models:**

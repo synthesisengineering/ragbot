@@ -69,6 +69,7 @@ def fake_home(tmp_path: Path, monkeypatch) -> Path:
     # every kind of root.
     (home / ".synthesis" / "skills").mkdir(parents=True)
     (home / ".claude" / "skills").mkdir(parents=True)
+    (home / ".agents" / "skills").mkdir(parents=True)
     (home / "workspaces" / "acme-user" / "synthesis-skills").mkdir(parents=True)
     (home / "workspaces" / "acme-user" / "synthesis-skills-acme-user").mkdir(parents=True)
 
@@ -284,16 +285,49 @@ class TestDiscoveryAgainstNewSources:
         skills = discover_skills()
         assert "should-not-appear" not in {s.name for s in skills}
 
-    def test_legacy_sources_still_discovered(self, fake_home: Path) -> None:
-        # The original ~/.synthesis/skills and ~/.claude/skills paths
+    def test_native_private_sources_discovered(self, fake_home: Path) -> None:
+        # Shared, Claude Code-private, and Codex/agent-neutral paths all
         # remain part of the chain.
         _write_skill(fake_home / ".synthesis" / "skills", "synthesis-skill")
         _write_skill(fake_home / ".claude" / "skills", "claude-skill")
+        _write_skill(fake_home / ".agents" / "skills", "codex-skill")
 
         skills = discover_skills()
         names = {s.name for s in skills}
         assert "synthesis-skill" in names
         assert "claude-skill" in names
+        assert "codex-skill" in names
+
+    def test_discovers_both_client_plugin_cache_layouts(
+        self, fake_home: Path
+    ) -> None:
+        claude_plugins = (
+            fake_home / ".claude" / "plugins" / "cache"
+            / "example-marketplace" / "example-plugin" / "1.0.0" / "skills"
+        )
+        codex_plugins = (
+            fake_home / ".codex" / "plugins" / "cache"
+            / "example-marketplace" / "example-plugin" / "1.0.0" / "skills"
+        )
+        _write_skill(claude_plugins, "claude-plugin-skill")
+        _write_skill(codex_plugins, "codex-plugin-skill")
+
+        names = {skill.name for skill in discover_skills()}
+        assert "claude-plugin-skill" in names
+        assert "codex-plugin-skill" in names
+
+    def test_agent_neutral_private_copy_overrides_claude_copy(
+        self, fake_home: Path
+    ) -> None:
+        _write_skill(fake_home / ".claude" / "skills", "shared-private")
+        codex_copy = _write_skill(
+            fake_home / ".agents" / "skills", "shared-private"
+        )
+
+        discovered = {
+            skill.name: skill for skill in discover_skills()
+        }
+        assert discovered["shared-private"].path == str(codex_copy)
 
     def test_discover_skills_returns_all_regardless_of_scope(
         self, fake_home: Path

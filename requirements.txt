@@ -69,7 +69,7 @@ apscheduler>=3.11.0
 # default install gives every Ragbot user a working OTLP and Prometheus path.
 opentelemetry-api>=1.31.0
 opentelemetry-sdk>=1.31.0
-opentelemetry-exporter-otlp-proto-grpc>=1.31.0
+opentelemetry-exporter-otlp-proto-grpc>=1.44.0
 opentelemetry-exporter-prometheus>=0.52b0
 prometheus-client>=0.22.0
 

@@ -36,7 +36,7 @@ pgvector>=0.4.0                 # pgvector type adapter for psycopg
 # --- API stack ------------------------------------------------------------
 fastapi>=0.136.0
 uvicorn[standard]>=0.46.0
-sse-starlette>=3.3.0
+sse-starlette>=3.4.8
 pydantic>=2.13.0
 
 # --- Model Context Protocol ----------------------------------------------

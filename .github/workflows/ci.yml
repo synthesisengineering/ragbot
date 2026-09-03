@@ -1,0 +1,78 @@
+# Continuous integration for Ragbot.
+#
+# Why this exists: the repository already carried a substantial, fast test
+# suite — 895 Python tests and 24 web tests, both under fifteen seconds — and
+# nothing ran it automatically. Twenty-one open dependency pull requests had
+# therefore accumulated with no pass/fail signal on any of them, which turns
+# every dependency decision into a reviewer's guess about a changelog. A test
+# suite nobody runs on a pull request is documentation, not a gate.
+#
+# Both jobs are deliberately secret-free so they run on forked pull requests
+# and on Dependabot's restricted token. The Python job mirrors the Makefile's
+# own `test-fast` target rather than restating the pytest invocation, so the
+# Makefile stays the single source of truth for how tests are run; `test-fast`
+# is the repository's declared no-integration target and excludes the one
+# module that needs live provider credentials.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run on the same ref carries no information. Cancel it rather
+# than paying for it, but never cancel a run on main — those are the ones the
+# history is read from.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: python (3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # No requires-python is declared anywhere in the repository, so this
+          # pins the version the suite is actually verified against rather
+          # than inheriting whatever the runner defaults to.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Run the test suite
+        run: make test-fast
+
+  # A `web` job belongs here too and is deliberately not present yet.
+  #
+  # `npm ci` cannot run against the committed lockfile on a Linux runner: on
+  # Linux, `@napi-rs/wasm-runtime` resolves `@emnapi/runtime@1.11.3`, and the
+  # lockfile carries only the sibling `@emnapi/core` at that version. The
+  # lockfile was generated on macOS, where those WASM fallback packages are
+  # never installed — four of them still have no integrity hash for the same
+  # reason. This is npm's known weakness with platform-specific optional
+  # dependencies, not repository drift, and it predates this workflow.
+  #
+  # Regenerating on macOS does not fix it, and was tried twice: an in-place
+  # update preserves the gaps, and a full rebuild dropped `integrity` and
+  # `resolved` from 415 of 541 packages, which trades a broken install for a
+  # weaker supply chain. Both attempts are recorded in
+  # docs/security/dependabot-triage-2026-09.md.
+  #
+  # The fix is a lockfile generated on Linux, then this job restored as:
+  #   npm ci  ->  npm run lint  ->  npm run test
+  # (all three verified passing locally: lint clean, 24 tests, audit clean).
+  #
+  # Shipping the Python gate alone rather than adding a job that fails on
+  # every run: a red check nobody can act on teaches people to ignore the
+  # check, which costs more than the coverage it pretends to add.

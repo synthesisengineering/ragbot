@@ -42,7 +42,20 @@ pydantic>=2.13.0
 # --- Model Context Protocol ----------------------------------------------
 # The official Python SDK powers synthesis_engine.mcp (client, six primitives,
 # OAuth, Tasks). Track 1.27+, which carries the Tasks experimental client.
-mcp>=1.27.0
+#
+# The upper bound is load-bearing, added 2026-09-03 after CI proved a clean
+# install was broken. With `>=1.27.0` alone, pip takes the newest release —
+# now 2.1.1 — and mcp 2.x removed `mcp.client.experimental` and moved `AnyUrl`
+# out of `mcp.types`. That breaks four modules (mcp/tasks.py, mcp/proxy.py,
+# mcp/primitives/resources.py, mcp_server/server.py) at import time, so the
+# suite could not even be collected: six errors before a single test ran.
+#
+# The tests passed on developer machines only because those already had 1.27.1
+# installed. Anyone cloning the repository and running `make install` got a
+# broken tree, which is the failure mode a floor-only constraint cannot catch.
+# Moving to mcp 2.x is a real migration across those four modules, not a pin
+# change; until that is done deliberately, this stays on the 1.x line.
+mcp>=1.27.1,<2
 
 # --- Background-task scheduling ------------------------------------------
 # Powers synthesis_engine.tasks.scheduler — the cron-style loop that drives
@@ -70,3 +83,10 @@ watchdog>=6.0.0
 # --- Test / dev ------------------------------------------------------------
 pytest>=9.0.0
 pytest-mock>=3.15.0
+# pytest-asyncio was undeclared until 2026-09-03, and pytest.ini has always
+# set `asyncio_default_fixture_loop_scope` — a pytest-asyncio option. So the
+# test configuration referenced a plugin the requirements never installed.
+# On a clean install 44 async tests failed with "async def functions are not
+# natively supported"; they passed on developer machines only because those
+# had the plugin installed by hand. Found by the first CI run.
+pytest-asyncio>=1.2.0

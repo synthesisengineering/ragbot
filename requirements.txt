@@ -83,3 +83,10 @@ watchdog>=6.0.0
 # --- Test / dev ------------------------------------------------------------
 pytest>=9.0.0
 pytest-mock>=3.15.0
+# pytest-asyncio was undeclared until 2026-09-03, and pytest.ini has always
+# set `asyncio_default_fixture_loop_scope` — a pytest-asyncio option. So the
+# test configuration referenced a plugin the requirements never installed.
+# On a clean install 44 async tests failed with "async def functions are not
+# natively supported"; they passed on developer machines only because those
+# had the plugin installed by hand. Found by the first CI run.
+pytest-asyncio>=1.2.0

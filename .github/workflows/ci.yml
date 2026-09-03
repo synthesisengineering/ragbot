@@ -59,6 +59,13 @@ jobs:
       # it simply predated the bound later releases added. Metadata checks can
       # only enforce what upstream declared. The guard against that failure is
       # the version floors and caps in requirements.txt, not this step.
+      #
+      # Note for anyone running this locally on Apple Silicon: `pip check`
+      # exits non-zero there with "nvidia-cusparselt-cu13 ... is not supported
+      # on this platform". That is a missing arm64 wheel for a transitive CUDA
+      # package, not a dependency conflict, and it does not occur on the amd64
+      # runner this job uses. Read the output rather than the exit code before
+      # concluding your change broke something.
       - name: Check for dependency conflicts
         run: python -m pip check
 

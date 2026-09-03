@@ -60,7 +60,7 @@ mcp>=1.27.1,<2
 # --- Background-task scheduling ------------------------------------------
 # Powers synthesis_engine.tasks.scheduler — the cron-style loop that drives
 # scheduled task firings (memory consolidation, periodic skill runs, etc.).
-apscheduler>=3.11.0
+apscheduler>=3.11.3
 
 # --- Observability --------------------------------------------------------
 # OpenTelemetry GenAI semantic conventions drive synthesis_engine.observability.

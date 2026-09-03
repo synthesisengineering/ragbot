@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # No requires-python is declared anywhere in the repository, so this
           # pins the version the suite is actually verified against rather

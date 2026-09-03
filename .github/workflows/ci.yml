@@ -53,26 +53,40 @@ jobs:
       - name: Run the test suite
         run: make test-fast
 
-  # A `web` job belongs here too and is deliberately not present yet.
-  #
-  # `npm ci` cannot run against the committed lockfile on a Linux runner: on
-  # Linux, `@napi-rs/wasm-runtime` resolves `@emnapi/runtime@1.11.3`, and the
-  # lockfile carries only the sibling `@emnapi/core` at that version. The
-  # lockfile was generated on macOS, where those WASM fallback packages are
-  # never installed — four of them still have no integrity hash for the same
-  # reason. This is npm's known weakness with platform-specific optional
-  # dependencies, not repository drift, and it predates this workflow.
-  #
-  # Regenerating on macOS does not fix it, and was tried twice: an in-place
-  # update preserves the gaps, and a full rebuild dropped `integrity` and
-  # `resolved` from 415 of 541 packages, which trades a broken install for a
-  # weaker supply chain. Both attempts are recorded in
-  # docs/security/dependabot-triage-2026-09.md.
-  #
-  # The fix is a lockfile generated on Linux, then this job restored as:
-  #   npm ci  ->  npm run lint  ->  npm run test
-  # (all three verified passing locally: lint clean, 24 tests, audit clean).
-  #
-  # Shipping the Python gate alone rather than adding a job that fails on
-  # every run: a red check nobody can act on teaches people to ignore the
-  # check, which costs more than the coverage it pretends to add.
+  web:
+    name: web (node 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # ci, not install: the lockfile is the contract, and a job that silently
+      # resolves a different tree than a developer's checkout cannot verify a
+      # dependency bump.
+      #
+      # This step required the lockfile to be generated on Linux. Generated on
+      # macOS it omits `@emnapi/runtime@1.11.3`, which `@napi-rs/wasm-runtime`
+      # resolves only on Linux, and `npm ci` refuses a lockfile that does not
+      # match the manifest. Regenerating on macOS cannot fix that and made
+      # things worse when forced — see docs/security/dependabot-triage-2026-09.md.
+      # If this step ever fails on a missing optional package again, regenerate
+      # the lockfile in a Linux container rather than on a developer machine:
+      #   docker run --rm -v "$PWD:/w" -w /w node:22 npm install --package-lock-only
+      # The current lockfile is verified to satisfy `npm ci` on both Linux and
+      # macOS, so the container is a repair tool, not part of the normal flow.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run the test suite
+        run: npm run test

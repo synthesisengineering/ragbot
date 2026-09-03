@@ -1,0 +1,81 @@
+# Continuous integration for Ragbot.
+#
+# Why this exists: the repository already carried a substantial, fast test
+# suite — 895 Python tests and 24 web tests, both under fifteen seconds — and
+# nothing ran it automatically. Twenty-one open dependency pull requests had
+# therefore accumulated with no pass/fail signal on any of them, which turns
+# every dependency decision into a reviewer's guess about a changelog. A test
+# suite nobody runs on a pull request is documentation, not a gate.
+#
+# Both jobs are deliberately secret-free so they run on forked pull requests
+# and on Dependabot's restricted token. The Python job mirrors the Makefile's
+# own `test-fast` target rather than restating the pytest invocation, so the
+# Makefile stays the single source of truth for how tests are run; `test-fast`
+# is the repository's declared no-integration target and excludes the one
+# module that needs live provider credentials.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run on the same ref carries no information. Cancel it rather
+# than paying for it, but never cancel a run on main — those are the ones the
+# history is read from.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: python (3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # No requires-python is declared anywhere in the repository, so this
+          # pins the version the suite is actually verified against rather
+          # than inheriting whatever the runner defaults to.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Run the test suite
+        run: make test-fast
+
+  web:
+    name: web (node 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # ci, not install: the lockfile is the contract, and a job that silently
+      # resolves a different tree than a developer's checkout cannot verify a
+      # dependency bump.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run the test suite
+        run: npm run test

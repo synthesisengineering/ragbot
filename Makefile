@@ -17,7 +17,13 @@ EVAL_SCORECARD ?= tests/evals/last-scorecard.md
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install test test-fast lint typecheck eval eval-quick \
+# `lint` and `typecheck` were listed here without rules to match, so
+# `make lint` failed with "No rule to make target". No Python linter or type
+# checker is configured in requirements.txt and there is no pyproject.toml, so
+# the names were aspirational rather than broken. Dropped rather than stubbed:
+# a .PHONY entry with no rule advertises a target that does not exist. The web
+# side does have a real linter, wired into CI as `npm run lint`.
+.PHONY: help install test test-fast eval eval-quick \
         eval-regressions eval-clean observability-test metrics-curl clean
 
 # ---------------------------------------------------------------------------

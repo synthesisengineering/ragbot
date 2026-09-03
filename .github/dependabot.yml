@@ -60,3 +60,20 @@ updates:
     #     versions: ["1.x"]
     #     # Rationale: transitive via foo-bar; upstream has no fix.
     #     # See docs/security/dependabot-triage-YYYY-MM.md#example-pkg.
+
+  # --- GitHub Actions -------------------------------------------------------
+  # Added 2026-09-03 alongside the first CI workflow. The workflow pins its
+  # actions by major version, and a pinned action is a dependency like any
+  # other: without this ecosystem the pins would age silently, which is the
+  # same failure the pip and npm blocks above exist to prevent.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"

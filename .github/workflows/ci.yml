@@ -50,6 +50,18 @@ jobs:
       - name: Install dependencies
         run: make install
 
+      # Catches packages whose installed versions violate another installed
+      # package's declared requirements. Cheap, and it fails the job rather
+      # than printing into a log nobody reads.
+      #
+      # Stated plainly: this would NOT have caught the 2026-09-03 openai/LiteLLM
+      # incident, because litellm 1.83.0's metadata was satisfied by openai 3 —
+      # it simply predated the bound later releases added. Metadata checks can
+      # only enforce what upstream declared. The guard against that failure is
+      # the version floors and caps in requirements.txt, not this step.
+      - name: Check for dependency conflicts
+        run: python -m pip check
+
       - name: Run the test suite
         run: make test-fast
 

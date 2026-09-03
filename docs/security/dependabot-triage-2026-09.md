@@ -116,3 +116,61 @@ reviewer's reading of a changelog.
   own floor-only constraint. CI answers this per-PR from here on, but no
   exhaustive sweep of latest-version resolution was performed in this pass.
 - `mcp` 2.x compatibility, deliberately deferred as above.
+
+## Addendum — the openai/LiteLLM resolution defect (same day)
+
+Recorded separately because it was *caused* by a merge in this pass, and the
+mechanism is the more useful part.
+
+### What happened
+
+PR #68 raised `openai` from `>=2.32.0` to `>=3.6.0`. CI passed and it merged.
+It should not have.
+
+LiteLLM caps openai at `<3.0.0` in every release from 1.90.0 onward. LiteLLM
+1.83.0 — the floor this file has carried since the March-2026 supply-chain
+incident — declares only `openai>=2.8.0`, because it predates openai 3
+entirely. So `openai>=3.6.0` did not produce a conflict. It produced a
+resolution: pip reached back to the single LiteLLM release old enough not to
+forbid openai 3, and installed **litellm 1.83.0 with openai 3.7.0**.
+
+That pairing is one upstream forbids in every version that knew to. It is
+worse than a failed install, for three reasons:
+
+1. **It installs.** `pip check` passes, because 1.83.0's metadata is satisfied.
+2. **The suite passes.** Provider calls are mocked, so nothing exercises the
+   combination. Green CI carried no information about it.
+3. **It froze the default gateway.** LiteLLM sat pinned at exactly the oldest
+   release the security note permits, with no upgrade path while the openai
+   floor stood — the opposite of what a security floor is for.
+
+### The decision
+
+Capped openai at `<3` and raised LiteLLM's floor to the current release.
+
+ragbot needs nothing from openai 3.x: every call site uses the stable
+`openai.OpenAI()` client present in both majors, so the floor bump bought no
+capability. Against that, LiteLLM is the default backend and the broadest
+provider surface, and it had been sixteen versions behind.
+
+Resolved after the change: **litellm 1.99.0, openai 2.54.0**, 896 tests
+passing, `pip check` clean.
+
+"Up to date" is the whole point here, and it argued *for* this: openai 3 with
+a 2026-era LiteLLM is not a more current ragbot, it is a ragbot whose gateway
+cannot move. The alternative — dropping LiteLLM for the `direct` backend,
+which uses provider SDKs and has no such cap — remains open, and is the right
+conversation to have deliberately rather than as a side effect of a bot's
+version bump.
+
+### The generalisation
+
+This is the floor-only convention biting a second time in one day, and worse
+than the first. The `mcp` case was a missing ceiling letting a breaking major
+in. This one is subtler: **a floor raised on one package silently dragged
+another package backwards**, because the resolver will reach arbitrarily far
+back to satisfy a constraint set, and nothing in that process asks whether the
+combination is one anybody has ever run.
+
+`pip check` is now in CI. It is worth having, and it would not have caught
+this. The guard that does is the pair of bounds in `requirements.txt`.

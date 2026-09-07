@@ -59,7 +59,7 @@ transformers>=5.6.0
 
 # --- Vector store backend ------------------------------------------------
 psycopg[binary,pool]>=3.3       # pgvector backend driver with built-in connection pool
-pgvector>=0.4.0                 # pgvector type adapter for psycopg
+pgvector>=0.5.0                 # pgvector type adapter for psycopg
 
 # --- API stack ------------------------------------------------------------
 fastapi>=0.136.0

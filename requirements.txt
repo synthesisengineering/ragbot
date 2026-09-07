@@ -62,7 +62,7 @@ psycopg[binary,pool]>=3.3       # pgvector backend driver with built-in connecti
 pgvector>=0.4.0                 # pgvector type adapter for psycopg
 
 # --- API stack ------------------------------------------------------------
-fastapi>=0.136.0
+fastapi>=0.141.1
 uvicorn[standard]>=0.46.0
 sse-starlette>=3.4.8
 pydantic>=2.13.0

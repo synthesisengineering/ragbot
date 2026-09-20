@@ -23,6 +23,9 @@ from synthesis_engine.config import get_all_models, get_default_model, check_api
 from ragbot.core import chat, chat_stream
 
 
+pytestmark = pytest.mark.integration
+
+
 # Test prompt - simple to minimize tokens/cost
 TEST_PROMPT = "Say 'hello' in exactly one word."
 

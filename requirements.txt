@@ -13,7 +13,7 @@
 # The floor is now the current release: being just past a known-compromised
 # range is not the same as being current, and a security floor that never
 # moves is a ceiling.
-anthropic>=0.97.0
+anthropic>=1.3.0
 # The `<3` is load-bearing and was learned the hard way on 2026-09-03.
 #
 # LiteLLM caps openai at `<3.0.0` in every release that knows openai 3 exists
@@ -39,13 +39,13 @@ openai>=2.32.0,<3
 # and other tools still pull in. Direct usage in the compiler has migrated
 # to google-genai (see below).
 google-generativeai>=0.8.6
-google-genai>=2.20.0
+google-genai>=2.22.0
 litellm>=1.99.0
-tiktoken>=0.12.0
+tiktoken>=0.14.0
 
 # --- LangChain (used by some downstream callers) -------------------------
 langchain>=1.3.18
-langchain-anthropic>=1.4.0
+langchain-anthropic>=1.7.1
 langchain-community>=0.4.2
 langchain-google-genai>=4.2.0
 langchain-openai>=1.6.0
@@ -59,13 +59,13 @@ transformers>=5.6.0
 
 # --- Vector store backend ------------------------------------------------
 psycopg[binary,pool]>=3.3       # pgvector backend driver with built-in connection pool
-pgvector>=0.4.0                 # pgvector type adapter for psycopg
+pgvector>=0.5.0                 # pgvector type adapter for psycopg
 
 # --- API stack ------------------------------------------------------------
-fastapi>=0.136.0
+fastapi>=0.141.1
 uvicorn[standard]>=0.46.0
 sse-starlette>=3.4.8
-pydantic>=2.13.0
+pydantic>=2.13.5
 
 # --- Model Context Protocol ----------------------------------------------
 # The official Python SDK powers synthesis_engine.mcp (client, six primitives,
@@ -104,13 +104,13 @@ prometheus-client>=0.22.0
 # --- General ---------------------------------------------------------------
 appdirs
 babel>=2.18.0
-boto3>=1.42.0
+boto3>=1.43.88
 PyYAML>=6.0.3
 watchdog>=6.0.0
 
 # --- Test / dev ------------------------------------------------------------
 pytest>=9.0.0
-pytest-mock>=3.15.0
+pytest-mock>=3.15.1
 # pytest-asyncio was undeclared until 2026-09-03, and pytest.ini has always
 # set `asyncio_default_fixture_loop_scope` — a pytest-asyncio option. So the
 # test configuration referenced a plugin the requirements never installed.

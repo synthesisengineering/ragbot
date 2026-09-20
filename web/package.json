@@ -11,7 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "next": "16.2.12",
+    "next": "16.3.5",
     "react": "19.2.1",
     "react-dom": "19.3.0",
     "react-markdown": "^10.1.0",
@@ -32,12 +32,12 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/ui": "^5.0.0",
-    "eslint": "10.8.0",
+    "eslint": "10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "typescript-eslint": "^8.65.0",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^5.0.0"
   },
   "overrides": {

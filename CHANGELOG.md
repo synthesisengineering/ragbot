@@ -8,6 +8,24 @@ For the prose narratives accompanying major releases, see
 [`docs/release-notes-v3.4.0.md`](docs/release-notes-v3.4.0.md) and
 the equivalents for prior versions when added.
 
+## v3.8.0 — 2026-09-20
+
+### Added
+
+- **OPENAI_ORGANIZATION support for multi-org billing** (#93). Deployments
+  spanning more than one OpenAI organization can now route spend correctly.
+- **Continuous integration** (#49, #71). Automated unit + web gates on every
+  change, with the web job restored on a Linux-generated lockfile.
+
+### Changed
+
+- OpenAI dependency capped below v3 with the default gateway moved to the
+  current endpoint (#72).
+- Live model tests marked integration so the unit gate skips them without API
+  spend (994b21a).
+- Dependency updates across Python and web (react, fastapi, pydantic, eslint,
+  and others) — 30+ routine bumps, all green: 903 Python + 24 web tests pass.
+
 ## v3.7.0 — 2026-07-17
 
 ### Added

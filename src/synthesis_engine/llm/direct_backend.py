@@ -359,11 +359,21 @@ class DirectBackend(LLMBackend):
         return openai
 
     def _get_openai_client(self, api_key: Optional[str]):
+        from .base import openai_organization_from_env
+
         openai = self._import_openai()
+        org = openai_organization_from_env()
+        client_kwargs: Dict[str, Any] = {}
         if api_key:
-            return openai.OpenAI(api_key=api_key)
+            client_kwargs["api_key"] = api_key
+        if org:
+            # Multi-org billing: without this, spend lands on the key's
+            # default org, which may not be the one that agreed to pay.
+            client_kwargs["organization"] = org
+        if api_key:
+            return openai.OpenAI(**client_kwargs)
         if self._openai_client is None:
-            self._openai_client = openai.OpenAI()
+            self._openai_client = openai.OpenAI(**client_kwargs)
         return self._openai_client
 
     def _build_openai_kwargs(self, request: LLMRequest) -> Dict[str, Any]:

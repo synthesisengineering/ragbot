@@ -8,9 +8,26 @@ absorbed inside backend implementations.
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterator, List, Optional
+
+
+#: Env var selecting the billed OpenAI organization for multi-org keys.
+#: Honored by every backend for OpenAI models; unset means the SDK's own
+#: default (or OPENAI_ORG_ID) applies.
+OPENAI_ORGANIZATION_ENV = "OPENAI_ORGANIZATION"
+
+
+def openai_organization_from_env() -> Optional[str]:
+    """Return the configured OpenAI organization id, or None when unset.
+
+    Blank values are treated as unset so a commented template line that
+    got uncommented without a value cannot bill the wrong org.
+    """
+    value = os.environ.get(OPENAI_ORGANIZATION_ENV, "").strip()
+    return value or None
 
 
 # ---------------------------------------------------------------------------

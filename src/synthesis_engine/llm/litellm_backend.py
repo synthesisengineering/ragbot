@@ -101,6 +101,16 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
     else:
         kwargs["max_tokens"] = req.max_tokens
 
+    # Multi-org billing: route OpenAI spend to the configured org.
+    # Placed before the free-form passthrough so an explicit
+    # req.extra["organization"] still wins.
+    if _provider_for(req.model) == PROVIDER_OPENAI:
+        from .base import openai_organization_from_env
+
+        org = openai_organization_from_env()
+        if org:
+            kwargs["organization"] = org
+
     # Reasoning / thinking handling.
     if req.thinking is not None:
         # Caller provided the provider-native shape; pass it through.

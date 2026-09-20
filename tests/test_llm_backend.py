@@ -184,6 +184,91 @@ class TestLiteLLMKwargsBuilder:
         # extra overrides the default-built max_tokens.
         assert out["max_tokens"] == 999
 
+    def test_openai_organization_from_env(self, monkeypatch):
+        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
+        monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
+        req = LLMRequest(model="openai/gpt-5.6-terra", messages=[])
+        out = _build_completion_kwargs(req)
+        assert out["organization"] == "org-payer123"
+
+    def test_openai_organization_absent_without_env(self, monkeypatch):
+        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
+        monkeypatch.delenv("OPENAI_ORGANIZATION", raising=False)
+        req = LLMRequest(model="openai/gpt-5.6-terra", messages=[])
+        out = _build_completion_kwargs(req)
+        assert "organization" not in out
+
+    def test_openai_organization_ignored_for_other_providers(self, monkeypatch):
+        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
+        monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
+        req = LLMRequest(model="anthropic/claude-sonnet-5", messages=[])
+        out = _build_completion_kwargs(req)
+        assert "organization" not in out
+
+    def test_openai_organization_extra_override_wins(self, monkeypatch):
+        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
+        monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
+        req = LLMRequest(model="gpt-5.6-terra", messages=[], extra={"organization": "org-explicit"})
+        out = _build_completion_kwargs(req)
+        assert out["organization"] == "org-explicit"
+
+
+# ---------------------------------------------------------------------------
+# OpenAI organization env contract (issue #6)
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAIOrganization:
+    def test_blank_env_is_unset(self, monkeypatch):
+        from synthesis_engine.llm.base import openai_organization_from_env
+        monkeypatch.setenv("OPENAI_ORGANIZATION", "   ")
+        assert openai_organization_from_env() is None
+
+    def test_missing_env_is_unset(self, monkeypatch):
+        from synthesis_engine.llm.base import openai_organization_from_env
+        monkeypatch.delenv("OPENAI_ORGANIZATION", raising=False)
+        assert openai_organization_from_env() is None
+
+    def test_direct_backend_passes_organization(self, monkeypatch):
+        import sys
+        import types
+        from synthesis_engine.llm.direct_backend import DirectBackend
+
+        seen = {}
+
+        class FakeOpenAI:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+        fake = types.ModuleType("openai")
+        fake.OpenAI = FakeOpenAI
+        monkeypatch.setitem(sys.modules, "openai", fake)
+        monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
+
+        backend = DirectBackend()
+        backend._get_openai_client(api_key="sk-test")
+        assert seen == {"api_key": "sk-test", "organization": "org-payer123"}
+
+    def test_direct_backend_omits_organization_without_env(self, monkeypatch):
+        import sys
+        import types
+        from synthesis_engine.llm.direct_backend import DirectBackend
+
+        seen = {}
+
+        class FakeOpenAI:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+        fake = types.ModuleType("openai")
+        fake.OpenAI = FakeOpenAI
+        monkeypatch.setitem(sys.modules, "openai", fake)
+        monkeypatch.delenv("OPENAI_ORGANIZATION", raising=False)
+
+        backend = DirectBackend()
+        backend._get_openai_client(api_key="sk-test")
+        assert seen == {"api_key": "sk-test"}
+
 
 # ---------------------------------------------------------------------------
 # DirectBackend healthcheck (no live calls)

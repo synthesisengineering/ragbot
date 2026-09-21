@@ -63,7 +63,7 @@ pgvector>=0.5.0                 # pgvector type adapter for psycopg
 
 # --- API stack ------------------------------------------------------------
 fastapi>=0.141.1
-uvicorn[standard]>=0.46.0
+uvicorn[standard]>=0.53.0
 sse-starlette>=3.4.8
 pydantic>=2.13.5
 

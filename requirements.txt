@@ -117,4 +117,4 @@ pytest-mock>=3.15.1
 # On a clean install 44 async tests failed with "async def functions are not
 # natively supported"; they passed on developer machines only because those
 # had the plugin installed by hand. Found by the first CI run.
-pytest-asyncio>=1.2.0
+pytest-asyncio>=1.4.0

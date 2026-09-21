@@ -55,7 +55,7 @@ sentence-transformers>=5.4.0
 # transformers must keep up with sentence-transformers' tokenizers pin —
 # otherwise a stale transformers errors out at import time. Track 5.6+
 # which supports tokenizers 0.22.x.
-transformers>=5.6.0
+transformers>=5.17.0
 
 # --- Vector store backend ------------------------------------------------
 psycopg[binary,pool]>=3.3       # pgvector backend driver with built-in connection pool

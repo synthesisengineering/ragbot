@@ -10,7 +10,7 @@ export interface Message {
   content: string;
 }
 
-export type ThinkingEffort = 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
+export type ThinkingEffort = 'auto' | 'off' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface VectorBackendInfo {
   backend?: string;
@@ -31,8 +31,8 @@ export interface ChatRequest {
   history?: Message[];
   stream?: boolean;
   /**
-   * Reasoning / thinking effort. Defaults: flagship → "medium", non-flagship → "off",
-   * models without thinking metadata → ignored. Override here or via the
+   * Reasoning effort. Verified contracts define allowed modes and defaults.
+   * Unsupported explicit values are rejected. Override here or via the
    * RAGBOT_THINKING_EFFORT env on the server.
    */
   thinking_effort?: ThinkingEffort;
@@ -67,12 +67,13 @@ export interface ModelInfo {
   available?: boolean;
   tier?: string;
   max_output_tokens?: number;
-  temperature?: number;
+  temperature?: number | null;
   max_temperature?: number;
   /** Human-readable label (e.g. "Claude Opus 4.7"). Falls back to `name` if absent. */
   display_name?: string;
   /** True when the model exposes a thinking-effort control. */
   supports_thinking?: boolean;
+  thinking?: { strict?: boolean; modes?: string[]; default?: string };
   /** True for local-runtime providers (Ollama). No API key needed; no cloud egress. */
   is_local?: boolean;
   is_flagship?: boolean;

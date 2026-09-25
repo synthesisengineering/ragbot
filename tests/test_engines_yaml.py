@@ -72,6 +72,9 @@ VALID_TIERS = {"judgment", "routine", "bulk"}
 # Valid thinking-mode values, used to validate `thinking.modes` and
 # `thinking.mode` when present.
 VALID_THINKING_MODES = {
+    "none",
+    "xhigh",
+    "max",
     "minimal",
     "low",
     "medium",
@@ -370,6 +373,7 @@ def _find_tiers_yaml() -> str:
     if env_path and os.path.exists(env_path):
         return env_path
     candidates = [
+        os.path.join(os.path.dirname(__file__), "fixtures", "model-tier-preferences-2026-09-25.yaml"),
         os.path.expanduser("~/.synthesis/skills/synthesis-model-tiers/tiers.yaml"),
         os.path.expanduser("~/.claude/skills/synthesis-model-tiers/tiers.yaml"),
         os.path.expanduser("~/.agents/skills/synthesis-model-tiers/tiers.yaml"),

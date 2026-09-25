@@ -258,6 +258,7 @@ def get_all_models() -> Dict[str, List[Dict[str, Any]]]:
                 # Forward thinking metadata (supported flag, mode, modes,
                 # features) so callers can decide how to set reasoning_effort.
                 "thinking": thinking_meta,
+                "request_parameters": model.get("request_parameters") or {},
                 # Convenience boolean for frontends that just want to know
                 # whether the model surfaces a thinking-effort control.
                 "supports_thinking": bool(thinking_meta.get('supported')),

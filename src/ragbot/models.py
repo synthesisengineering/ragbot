@@ -52,8 +52,9 @@ class ChatRequest(BaseModel):
         None,
         description=(
             "Reasoning effort: one of 'auto', 'off', 'minimal', 'low', 'medium', "
-            "'high'. None reads RAGBOT_THINKING_EFFORT env or applies the engines.yaml "
-            "default (flagship → medium, others → off, models without thinking metadata → ignored)."
+            "'high', 'xhigh', 'max', or 'none' where supported. None reads "
+            "RAGBOT_THINKING_EFFORT env or applies the engines.yaml "
+            "default. Verified contracts reject unsupported explicit effort without substitution."
         ),
     )
     additional_workspaces: Optional[List[str]] = Field(

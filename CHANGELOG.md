@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.8.1 — 2026-09-25
+
+Refresh the verified model catalog and expose model-specific thinking options in the API and settings UI. Validate explicit model, reasoning and output limits after provider extension merging. Keep unrelated LiteLLM pricing and input allowances unchanged when registering reasoning capabilities. Existing user preferences remain explicit inputs.
+
+
 All notable changes to Ragbot are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) loosely, and
 versioning follows [Semantic Versioning](https://semver.org/).

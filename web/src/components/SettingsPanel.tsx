@@ -19,6 +19,7 @@ import {
   type ThinkingEffort,
 } from '@/lib/api';
 import { ModelPicker } from './ModelPicker';
+import { thinkingOptions } from '@/lib/thinking';
 import { McpServersPanel } from './McpServersPanel';
 import { PolicyPanel } from './PolicyPanel';
 import { SkillsPanel } from './SkillsPanel';
@@ -208,6 +209,8 @@ export function SettingsPanel({
   const showThinkingControl =
     onThinkingEffortChange !== undefined && Boolean(selectedModel?.supports_thinking);
 
+  const effortOptions = thinkingOptions(selectedModel, thinkingEffort);
+
   if (loading) {
     return (
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
@@ -291,14 +294,14 @@ export function SettingsPanel({
                   disabled={disabled}
                   className="rounded border border-gray-300 dark:border-gray-600
                              bg-white dark:bg-gray-800 px-2 py-1 text-xs flex-1"
-                  title="Reasoning effort. Defaults: flagship → medium, others → off."
+                  title="Reasoning effort. Auto uses the selected model catalog default."
+                  aria-label="Thinking effort"
                 >
-                  <option value="auto">auto</option>
-                  <option value="off">off</option>
-                  <option value="minimal">minimal</option>
-                  <option value="low">low</option>
-                  <option value="medium">medium</option>
-                  <option value="high">high</option>
+                  {effortOptions.map((option) => (
+                    <option key={option.value} value={option.value} disabled={option.disabled}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}

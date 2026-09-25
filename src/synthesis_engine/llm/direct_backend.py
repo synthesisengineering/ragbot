@@ -246,7 +246,8 @@ class DirectBackend(LLMBackend):
             }
             if passthrough:
                 kwargs.update(passthrough)
-        return kwargs
+        from .model_parameters import apply_request_contract
+        return apply_request_contract(request, kwargs, native_model=True)
 
     def _anthropic_complete(self, request: LLMRequest) -> LLMResponse:
         cache_cfg = CacheConfig.from_extra(request.extra)
@@ -403,7 +404,8 @@ class DirectBackend(LLMBackend):
             }
             if passthrough:
                 kwargs.update(passthrough)
-        return kwargs
+        from .model_parameters import apply_request_contract
+        return apply_request_contract(request, kwargs, native_model=True)
 
     def _openai_complete(self, request: LLMRequest) -> LLMResponse:
         with chat_completion_span(
@@ -532,8 +534,18 @@ class DirectBackend(LLMBackend):
                 config_kwargs["temperature"] = request.temperature
             if request.max_tokens:
                 config_kwargs["max_output_tokens"] = request.max_tokens
-            if request.reasoning_effort:
-                # Map effort to ThinkingConfig.thinking_budget if SDK supports it.
+            from .model_parameters import model_contract, resolve_effort
+            info, contract = model_contract(request.model)
+            if contract.get("effort") == "thinking_level":
+                if request.thinking is not None:
+                    raise ValueError("This model requires thinking_level, not a token budget")
+                unsupported = set(request.extra or {}) - {"cache_control_enabled", "cache_min_block_tokens", "cache_ttl"}
+                if unsupported:
+                    raise ValueError(f"Unsupported direct Google request options: {sorted(unsupported)}")
+                effort = resolve_effort(info, request.reasoning_effort)
+                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=effort)
+            elif request.reasoning_effort:
+                # Models declaring a numeric budget retain their documented shape.
                 budget = _EFFORT_TO_BUDGET.get(request.reasoning_effort)
                 if budget and hasattr(types, "ThinkingConfig"):
                     config_kwargs["thinking_config"] = types.ThinkingConfig(

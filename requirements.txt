@@ -40,7 +40,9 @@ openai>=2.32.0,<3
 # to google-genai (see below).
 google-generativeai>=0.8.6
 google-genai>=2.22.0
-litellm>=1.99.0
+# Capability-only registration must preserve missing prices and explicit effort.
+# Verified offline transformation floor: docs/model-catalog-2026-09-25.yaml.
+litellm>=1.102.1
 tiktoken>=0.14.0
 
 # --- LangChain (used by some downstream callers) -------------------------

@@ -173,7 +173,7 @@ Adding a new backend (e.g., Bifrost, Portkey, OpenRouter) is a single file imple
 
 ### Reasoning / Thinking Modes
 
-Models that advertise thinking support in `engines.yaml` (Claude Fable 5 / Opus 4.8 / Sonnet 5 / Haiku 4.5, GPT-5.6 Sol/Terra, Gemini 3 Flash / 3.1 Pro / 3.1 Flash Lite) are wired through LiteLLM's `reasoning_effort` parameter. LiteLLM normalises that into the provider-native shape (e.g., `thinking={"type": "adaptive"}` for Claude 4.7+; Claude 4.8+/5.x additionally reject the `temperature` parameter — see `synthesis_engine/llm/base.py`).
+Models that advertise thinking support in `engines.yaml` are wired through the catalog-validated `reasoning_effort` parameter. Provider-native identities and supported effort levels come from that catalog; `docs/model-catalog-2026-09-25.yaml` records verification sources. Explicit model, effort and output-limit choices must survive final SDK serialization, including provider extension bodies. LiteLLM normalises that into the provider-native shape (e.g., `thinking={"type": "adaptive"}` for Claude 4.7+; Claude 4.8+/5.x additionally reject the `temperature` parameter — see `synthesis_engine/llm/base.py`).
 
 Default policy:
 
@@ -183,7 +183,7 @@ Default policy:
 
 Override:
 
-- Per-call: pass `thinking_effort=` to `chat()` / `chat_stream()`. Accepted values: `high`, `medium`, `low`, `minimal`, `off`, `auto`.
+- Per-call: pass `thinking_effort=` to `chat()` / `chat_stream()`. Supported values are model-specific and validated against `engines.yaml`; `off` and `auto` retain their control semantics.
 - Globally: set `RAGBOT_THINKING_EFFORT=...` env var.
 
 Implementation in `src/ragbot/core.py::_resolve_thinking_for_model`.

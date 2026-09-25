@@ -42,12 +42,12 @@ class TestGetFastModel:
     def test_get_fast_model_for_openai(self):
         """Fast model for OpenAI should be the bulk-tier model from engines.yaml."""
         fast = _get_fast_model('openai/gpt-5.6-terra')
-        assert fast == 'openai/gpt-5.6-luna'
+        assert fast == 'openai/gpt-6-luna'
 
     def test_get_fast_model_for_google(self):
         """Fast model for Google should be the bulk-tier Gemini Flash Lite."""
         fast = _get_fast_model('gemini/gemini-3.1-pro-preview')
-        assert fast == 'gemini/gemini-3.1-flash-lite-preview'
+        assert fast == 'gemini/gemini-3.5-flash-lite'
 
     def test_get_fast_model_falls_back_to_default(self):
         """When no model specified, use default provider's fast model."""

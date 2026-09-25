@@ -1,0 +1,100 @@
+# tiers.yaml — canonical cross-provider model-tier resolution table.
+#
+# This file answers ONE question: "which model plays which ROLE right now?"
+# It is deliberately NOT a capability catalog (context windows, pricing,
+# thinking modes) — each product keeps its own catalog (e.g. Ragbot's
+# engines.yaml). Consumers — skills, project docs, agent memory, humans
+# switching models in a client UI — reference the ROLE LABELS and resolve
+# them here.
+#
+# Roles (three, deliberately fewer than some vendors' ladders). The labels
+# name the WORK, not the model — vendors name artifacts; work categories
+# are the thing that stays stable across vendor ladder changes:
+#   judgment — judgment calls, novel patterns, skill/script authorship,
+#              cross-system changes, anything where being wrong is expensive
+#   routine  — routine rule-following execution (daily sweeps, mechanical
+#              runs, well-templated work)
+#   bulk     — high-volume, low-stakes work (classification at scale,
+#              summarization drips)
+#
+# Naming history: v1.x used frontier/efficient/light. Renamed 2026-07-14
+# because the industry uses "frontier" to mean the whole current generation
+# (OpenAI applies it to all three GPT-5.6 models), colliding with our
+# top-rung meaning. Full rationale: references/naming-rationale.md.
+#
+# Per role and provider, the role key holds an ORDERED PREFERENCE LIST:
+# the first entry is preferred; later entries are documented alternatives.
+# This order never authorizes changing an explicit user selection. A
+# provider with fewer rungs lists one model per role; a provider with more
+# rungs expresses the extras as ordered alternatives. When a vendor merges two
+# rungs, the list shrinks — no schema change.
+#
+# Product catalogs (e.g. Ragbot's engines.yaml) use the SAME tier
+# vocabulary in a per-model `tier:` field. A catalog may carry more
+# models than the role lists bless (local models kept for bigger
+# hardware); the reverse — a model listed here but absent from the
+# catalog, or listed under a different role than its catalog tier —
+# is drift, and Ragbot's tests/test_engines_yaml.py fails on it.
+#
+# Update protocol: verify identifiers against the provider's official docs
+# BEFORE editing (never from an agent's training data); record the
+# verification date per provider; unknown means the literal string
+# "unknown", never a guess.
+
+# `verified` is documentation verification only, not account or runtime acceptance.
+# Identifier and selector provenance: references/catalog-verification.yaml.
+
+version: 2
+updated: '2026-09-25'
+verification: references/catalog-verification.yaml
+providers:
+  anthropic:
+    verified: '2026-09-25'
+    identifier_namespace: provider_api
+    endpoint_availability: unknown
+    judgment:
+    - claude-fable-5-1
+    - claude-opus-5-5
+    routine:
+    - claude-sonnet-5
+    bulk:
+    - claude-haiku-4-5-20251001
+  openai:
+    verified: '2026-09-25'
+    identifier_namespace: provider_api
+    endpoint_availability: unknown
+    judgment:
+    - gpt-6-astra
+    routine:
+    - gpt-6-sol
+    bulk:
+    - gpt-6-luna
+  google:
+    verified: '2026-09-25'
+    identifier_namespace: litellm_gemini
+    endpoint_availability: unknown
+    judgment:
+    - gemini/gemini-3.1-pro-preview
+    routine:
+    - gemini/gemini-3.8-flash
+    bulk:
+    - gemini/gemini-3.5-flash-lite
+  ollama:
+    verified: '2026-09-25'
+    identifier_namespace: ollama_tag
+    endpoint_availability: unknown
+    hardware_fit: unknown
+    judgment:
+    - qwen3.6:35b-a3b
+    - gemma4:31b
+    routine:
+    - gemma4:26b
+    - qwen3.6:27b
+    bulk:
+    - gemma4:e4b
+clients:
+  gemini-api:
+    google:
+      gemini/gemini-3.1-pro-preview: gemini-3.1-pro-preview
+      gemini/gemini-3.8-flash: gemini-3.8-flash
+      gemini/gemini-3.5-flash-lite: gemini-3.5-flash-lite

@@ -1,0 +1,175 @@
+schema_version: 1
+verified: '2026-09-25'
+scope: Provider documentation and offline consumer serialization. No account or live inference claim.
+sources:
+  openai-astra: https://developers.openai.com/api/docs/models/gpt-6-astra
+  openai-sol: https://developers.openai.com/api/docs/models/gpt-6-sol
+  openai-luna: https://developers.openai.com/api/docs/models/gpt-6-luna
+  openai-request: https://developers.openai.com/api/docs/guides/latest-model
+  openai-token-limit: https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
+  anthropic-fable: https://platform.claude.com/docs/en/models/fable-5-1/overview
+  anthropic-opus: https://platform.claude.com/docs/en/models/opus-5-5/overview
+  anthropic-effort: https://platform.claude.com/docs/en/build-with-claude/effort
+  anthropic-thinking: https://platform.claude.com/docs/en/build-with-claude/thinking
+  google-flash: https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash
+  google-lite: https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
+  google-thinking: https://ai.google.dev/gemini-api/docs/thinking
+  google-sdk: https://googleapis.github.io/python-genai/genai.html
+  google-sdk-release: https://github.com/googleapis/python-genai/releases/tag/v2.22.0
+  litellm-release: https://github.com/BerriAI/litellm/releases/tag/v1.102.1
+models:
+  gpt-6-astra:
+    sources:
+    - openai-astra
+    - openai-request
+    - openai-token-limit
+    context_window: 1050000
+    max_output_tokens: 128000
+    effort_modes:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: product policy
+    endpoint_account_availability: unknown
+    live_request_acceptance: not measured
+  gpt-6-sol:
+    sources:
+    - openai-sol
+    - openai-request
+    - openai-token-limit
+    context_window: 1050000
+    max_output_tokens: 128000
+    effort_modes:
+    - none
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: provider documentation
+    endpoint_account_availability: unknown
+    live_request_acceptance: not measured
+  gpt-6-luna:
+    sources:
+    - openai-luna
+    - openai-request
+    - openai-token-limit
+    context_window: 1050000
+    max_output_tokens: 128000
+    effort_modes:
+    - none
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: provider documentation
+    endpoint_account_availability: unknown
+    live_request_acceptance: not measured
+  claude-fable-5-1:
+    sources:
+    - anthropic-fable
+    - anthropic-effort
+    - anthropic-thinking
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: high
+    default_provenance: provider documentation
+    endpoint_account_availability: unknown
+    live_request_acceptance: not measured
+  claude-opus-5-5:
+    sources:
+    - anthropic-opus
+    - anthropic-effort
+    - anthropic-thinking
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: provider documentation
+    endpoint_account_availability: unknown
+    live_request_acceptance: not measured
+  gemini/gemini-3.8-flash:
+    sources:
+    - google-flash
+    - google-thinking
+    - google-sdk
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes:
+    - low
+    - medium
+    - high
+    reasoning_default: medium
+    default_provenance: provider documentation
+    endpoint_account_availability: unknown
+    live_request_acceptance: not measured
+  gemini/gemini-3.5-flash-lite:
+    sources:
+    - google-lite
+    - google-thinking
+    - google-sdk
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes:
+    - minimal
+    - low
+    - medium
+    - high
+    reasoning_default: minimal
+    default_provenance: provider documentation
+    endpoint_account_availability: unknown
+    live_request_acceptance: not measured
+product_policy:
+  default_max_tokens: 8192
+  max_temperature_ui_cap: 1
+  temperature: null
+  existing_model_values_and_explicit_defaults: unchanged
+  role_preference: First matching model follows the exact reviewed synthesis-model-tiers table, including
+    local Qwen judgment preference. This does not replace an explicit user model.
+  unsupported_explicit_effort: reject; never substitute a lower or default effort
+  pricing: No new price fields or zero-price placeholders. Existing dependency price data is retained;
+    absent/null price remains unknown.
+transport:
+  OpenAI: Chat Completions uses max_completion_tokens. Sampling controls omitted under reasoning. Unsupported
+    tool/effort combinations require Responses API and fail explicitly without lowering effort.
+  Anthropic: Adaptive thinking and output_config.effort preserved through direct SDK and LiteLLM. No temperature
+    or manual thinking budgets.
+  Google: Direct SDK uses thinking_level; LiteLLM uses reasoning_effort. Gemini 3.8 does not accept minimal.
+  LiteLLM: Tested floor 1.102.1. Register only documented capabilities through register_model with persist_across_reloads=False;
+    do not infer or register prices. Per-request drop_params=False. Older bundled maps lack new Anthropic
+    capability flags.
+client_boundary:
+  provider_api_ids: These identifiers describe provider APIs or the LiteLLM Gemini namespace.
+  native_client_selectors: Not inferred from this product catalog; existing user client selection and
+    effort remain unchanged.
+  offline: No paid or live provider generation in verification.
+tier_fixture_sha256: 04bc5b220ec3bf301b59ac51a3a67e165bf3039c32a948e7edd77d8bfcf0559a
+transport_merge_contract:
+  final_body: The SDK merges extra_body after typed arguments. Conflicting model identity, effort,
+    token-limit fields, thinking, sampling, or unsupported tool controls fail before serialization.
+  extensions: Unrelated body fields and transport headers remain supported. Anthropic output_config
+    siblings merge with the explicit effort, and adaptive-thinking extensions retain the required type.
+  native_identifiers: Unqualified identifiers use the unique verified catalog match; ambiguous matches
+    require a provider prefix. Native wire identifiers stay separate from LiteLLM provider prefixes.
+  capability_registration: Only verified reasoning flags and provider identity may change. Existing
+    mode, input/output allowances, price fields and unrelated models remain byte-value equivalent.
+    Same-provider canonical aliases may receive the same verified capability flags. A total context
+    window is not substituted for the dependency's distinct input allowance.
+  unknown_costs: Missing price entries remain absent; no null or numeric price fields are manufactured.

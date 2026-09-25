@@ -54,6 +54,7 @@ async def list_models():
                 supports_system_role=model.get("supports_system_role", True),
                 display_name=model.get("display_name") or model["name"],
                 supports_thinking=bool(model.get("supports_thinking", False)),
+                thinking=model.get("thinking") or {},
                 is_local=bool(model.get("is_local", provider in LOCAL_PROVIDERS)),
             ))
 
@@ -86,6 +87,7 @@ async def list_all_models():
                 "max_temperature": model.get("max_temperature", 2),
                 "display_name": model.get("display_name") or model["name"],
                 "supports_thinking": bool(model.get("supports_thinking", False)),
+                "thinking": model.get("thinking") or {},
                 "is_local": bool(model.get("is_local", provider in LOCAL_PROVIDERS)),
                 "is_flagship": bool(model.get("is_flagship", False)),
             })

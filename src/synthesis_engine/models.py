@@ -10,7 +10,7 @@ config responses) do NOT belong here. They live in the runtime package
 that owns the HTTP/CLI surface they describe.
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -61,4 +61,5 @@ class ModelInfo(BaseModel):
     supports_system_role: bool = True
     display_name: Optional[str] = None
     supports_thinking: bool = False
+    thinking: Dict[str, Any] = Field(default_factory=dict)
     is_local: bool = False

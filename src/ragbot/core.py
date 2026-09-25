@@ -56,6 +56,14 @@ def _resolve_thinking_for_model(
     import os
     from synthesis_engine.config import get_model_info as _get_model_info  # local to avoid cycles
 
+    # Verified contracts validate an explicit value before fallback: an unknown
+    # effort must never become a cheaper/default request silently.
+    info = _get_model_info(model) or {}
+    if (info.get("thinking") or {}).get("strict"):
+        from synthesis_engine.llm.model_parameters import resolve_effort
+        raw = requested_effort if requested_effort is not None else os.environ.get("RAGBOT_THINKING_EFFORT")
+        return {"reasoning_effort": resolve_effort(info, raw)}
+
     # 1) Explicit per-call override
     effort = _normalise_effort(requested_effort)
     # 2) Env var fallback

@@ -149,6 +149,13 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
         if passthrough:
             kwargs.update(passthrough)
 
+    from .model_parameters import apply_request_contract
+    kwargs = apply_request_contract(req, kwargs)
+    from .model_parameters import model_contract, register_litellm_capabilities
+    if model_contract(req.model)[1]:
+        # A dependency capability gap must reject the request, never erase effort.
+        kwargs["drop_params"] = False
+        register_litellm_capabilities(req.model)
     return kwargs
 
 

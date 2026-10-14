@@ -152,6 +152,9 @@ Code Contributors & Collaborators
 - [Jim Mortko](https://github.com/jskills)
 - [Vik Pant](https://www.linkedin.com/in/vikpant/)
 
+Security Acknowledgments
+- Thank you to Hanno Horrmeyer of [Sielum](https://sielum.io) for reporting, in October 2026, that the repository's committed Claude Code settings let an agent run any shell command for anyone who cloned the repo and trusted the folder. The blanket allow rules were removed in [#116](https://github.com/synthesisengineering/ragbot/pull/116). If you cloned Ragbot before that change, run `git pull` and confirm that `.claude/settings.json` is gone from your copy.
+
 How to Contribute
 
 Your code contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for important safety guidelines (especially about not committing personal data), then fork the repository and submit a pull request with your improvements.

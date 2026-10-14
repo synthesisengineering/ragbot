@@ -46,7 +46,7 @@ litellm>=1.102.1
 tiktoken>=0.14.0
 
 # --- LangChain (used by some downstream callers) -------------------------
-langchain>=1.3.18
+langchain>=1.4.2
 langchain-anthropic>=1.7.1
 langchain-community>=0.4.2
 langchain-google-genai>=4.2.0

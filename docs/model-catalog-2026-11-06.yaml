@@ -1,0 +1,367 @@
+# Model catalog verification record for engines.yaml (2026-11-06).
+# Replaces docs/model-catalog-2026-09-25.yaml.
+schema_version: 2
+verified: '2026-11-06'
+scope: 'Provider documentation and model cards fetched 2026-11-06; offline serialization through the provider
+  SDKs and LiteLLM; account visibility through each provider''s list-models endpoint with the owner''s
+  keys. Live completions were not measured: all three cloud accounts returned billing errors (no credit)
+  that day.'
+sources:
+  openai-models: https://developers.openai.com/api/docs/models
+  openai-astra: https://developers.openai.com/api/docs/models/gpt-6-astra
+  openai-sol: https://developers.openai.com/api/docs/models/gpt-6.1-sol
+  openai-terra: https://developers.openai.com/api/docs/models/gpt-6.1-terra
+  openai-luna: https://developers.openai.com/api/docs/models/gpt-6-luna
+  openai-gpt-6-sol: https://developers.openai.com/api/docs/models/gpt-6-sol
+  openai-latest-model: https://developers.openai.com/api/docs/guides/latest-model
+  openai-changelog: https://developers.openai.com/api/docs/changelog
+  openai-deprecations: https://developers.openai.com/api/docs/deprecations
+  anthropic-overview: https://platform.claude.com/docs/en/models/overview
+  anthropic-fable: https://platform.claude.com/docs/en/models/fable-5-1/overview
+  anthropic-opus: https://platform.claude.com/docs/en/models/opus-5-5/overview
+  anthropic-sonnet: https://platform.claude.com/docs/en/models/sonnet-5-5/overview
+  anthropic-haiku: https://platform.claude.com/docs/en/models/haiku-5-5/overview
+  anthropic-effort: https://platform.claude.com/docs/en/build-with-claude/effort
+  anthropic-thinking: https://platform.claude.com/docs/en/build-with-claude/thinking
+  anthropic-deprecations: https://platform.claude.com/docs/en/about-claude/model-deprecations
+  google-models: https://aistudio.google.com/docs/models
+  google-argon: https://aistudio.google.com/docs/models/gemini-4-argon
+  google-flash: https://aistudio.google.com/docs/models/gemini-3.8-flash
+  google-lite: https://aistudio.google.com/docs/models/gemini-3.5-flash-lite
+  google-pro-preview: https://aistudio.google.com/docs/models/gemini-3.1-pro-preview
+  google-thinking: https://aistudio.google.com/docs/thinking
+  google-changelog: https://aistudio.google.com/docs/changelog
+  google-vertex-gemini-4: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/get-started-with-gemini-4
+  litellm-map-1.108.1: https://raw.githubusercontent.com/BerriAI/litellm/v1.108.1/model_prices_and_context_window.json
+  ollama-gemma4: https://ollama.com/library/gemma4/tags
+  gemma4-12b-card: https://hf.co/google/gemma-4-12B-it
+  ollama-qwen3.8: https://ollama.com/library/qwen3.8/tags
+  qwen3.8-27b-card: https://hf.co/Qwen/Qwen3.8-27B
+  ollama-qwen3.8-flash-next: https://ollama.com/library/qwen3.8-flash-next/tags
+  qwen3.8-flash-next-card: https://hf.co/Qwen/Qwen3.8-Flash-Next
+  ollama-muse-glimmer: https://ollama.com/library/muse-glimmer/tags
+  muse-glimmer-card: https://hf.co/meta-models/Muse-Glimmer-30B
+  ollama-nemotron-super: https://ollama.com/library/nemotron-3.5-super/tags
+  ollama-mistral-medium: https://ollama.com/library/mistral-medium-3.5/tags
+  mistral-medium-card: https://hf.co/mistralai/Mistral-Medium-3.5-128B
+  ollama-deepseek-v3.2-retired: https://ollama.com/library/deepseek-v3.2
+  ollama-mistral-large-3: https://ollama.com/library/mistral-large-3/tags
+  ollama-mistral-small-4-missing: https://ollama.com/library/mistral-small-4
+  ollama-llama4: https://ollama.com/library/llama4/tags
+models:
+  gpt-6-astra:
+    sources:
+    - openai-astra
+    - openai-latest-model
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: &id001
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: product policy (OpenAI states none)
+    released: '2026-09-03'
+    supersedes: []
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Tool calling through the Responses API only.
+  gpt-6.1-sol:
+    sources:
+    - openai-sol
+    - openai-gpt-6-sol
+    - openai-latest-model
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: *id001
+    reasoning_default: medium
+    default_provenance: provider documentation
+    released: '2026-09-29'
+    supersedes:
+    - gpt-6-sol
+    - gpt-5.6-sol
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Drops the `none` effort level GPT-6 Sol had.
+    - Tool calling through the Responses API only.
+  gpt-6.1-terra:
+    sources:
+    - openai-terra
+    - openai-latest-model
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: &id002
+    - none
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: provider documentation
+    released: '2026-10-26'
+    supersedes:
+    - gpt-5.6-terra
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Absent from LiteLLM 1.108.1's bundled map; Ragbot registers its verified capabilities without prices.
+    - Tool calling through the Responses API only.
+  gpt-6-luna:
+    sources:
+    - openai-luna
+    - openai-latest-model
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: *id002
+    reasoning_default: medium
+    default_provenance: provider documentation
+    released: '2026-09-22'
+    supersedes:
+    - gpt-5.6-luna
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Chat Completions function calling only at effort none.
+  claude-fable-5-1:
+    sources:
+    - anthropic-fable
+    - anthropic-effort
+    - anthropic-thinking
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: *id001
+    reasoning_default: high
+    default_provenance: provider documentation
+    released: '2026-09-01'
+    supersedes:
+    - claude-fable-5
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Adaptive thinking always on; disabled thinking returns 400.
+  claude-opus-5-5:
+    sources:
+    - anthropic-opus
+    - anthropic-effort
+    - anthropic-thinking
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: *id001
+    reasoning_default: medium
+    default_provenance: provider documentation
+    released: '2026-09-22'
+    supersedes:
+    - claude-opus-4-8
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Adaptive thinking always on; disabled thinking returns 400.
+  claude-sonnet-5-5:
+    sources:
+    - anthropic-sonnet
+    - anthropic-effort
+    - anthropic-thinking
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: *id001
+    reasoning_default: high
+    default_provenance: provider documentation
+    released: '2026-09-28'
+    supersedes:
+    - claude-sonnet-5
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Disabled thinking returns 400.
+  claude-haiku-5-5:
+    sources:
+    - anthropic-haiku
+    - anthropic-effort
+    - anthropic-thinking
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: *id001
+    reasoning_default: medium
+    default_provenance: provider documentation
+    released: '2026-10-07'
+    supersedes:
+    - claude-haiku-4-5-20251001
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Thinking may be disabled at effort high or below; Ragbot always sends adaptive thinking.
+  gemini-4-argon:
+    sources:
+    - google-argon
+    - google-thinking
+    - google-vertex-gemini-4
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes:
+    - low
+    - medium
+    - high
+    reasoning_default: medium
+    default_provenance: provider documentation
+    released: '2026-10-13'
+    supersedes:
+    - gemini-3.1-pro-preview
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Rejects thinking_budget and the MINIMAL level (Vertex AI guide); sampling parameters ignored.
+  gemini-3.8-flash:
+    sources:
+    - google-flash
+    - google-thinking
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes:
+    - low
+    - medium
+    - high
+    reasoning_default: medium
+    default_provenance: provider documentation
+    released: '2026-09-02'
+    supersedes:
+    - gemini-3-flash-preview
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - MINIMAL returns an error; sampling parameters deprecated.
+  gemini-3.5-flash-lite:
+    sources:
+    - google-lite
+    - google-thinking
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes:
+    - minimal
+    - low
+    - medium
+    - high
+    reasoning_default: minimal
+    default_provenance: provider documentation
+    released: '2026-07-21'
+    supersedes:
+    - gemini-3.1-flash-lite-preview (shut down 2026-05-25)
+    endpoint_account_availability: listed for the owner's key (2026-11-06)
+    live_request_acceptance: not measured (account out of credit)
+    notes:
+    - Sampling parameters deprecated and ignored.
+local_models:
+  gemma4:31b:
+    sources:
+    - ollama-gemma4
+    params: 30.7B dense
+    context_window: 262144
+    license: apache-2.0
+    local_tag_verified: true
+  gemma4:26b:
+    sources:
+    - ollama-gemma4
+    params: 25.2B total / 3.8B active MoE
+    context_window: 262144
+    license: apache-2.0
+    local_tag_verified: true
+  gemma4:12b:
+    sources:
+    - ollama-gemma4
+    - gemma4-12b-card
+    params: 11.95B dense
+    context_window: 262144
+    license: apache-2.0
+    released: '2026-06-03'
+    local_tag_verified: true
+  gemma4:e4b:
+    sources:
+    - ollama-gemma4
+    params: 4.5B effective
+    context_window: 131072
+    license: apache-2.0
+    local_tag_verified: true
+  qwen3.8:27b:
+    sources:
+    - ollama-qwen3.8
+    - qwen3.8-27b-card
+    params: 27B dense, vision
+    context_window: 262144
+    license: apache-2.0
+    released: 2026-08
+    supersedes:
+    - qwen3.6:27b
+    - qwen3.6:35b-a3b
+    local_tag_verified: true
+  qwen3.8-flash-next:125b-a6b-q4_K_M:
+    sources:
+    - ollama-qwen3.8-flash-next
+    - qwen3.8-flash-next-card
+    params: 125B total / 6B active MoE (preview)
+    context_window: 262144
+    license: qwen-community-1.0
+    released: 2026-08
+    local_tag_verified: true
+  muse-glimmer:30b:
+    sources:
+    - ollama-muse-glimmer
+    - muse-glimmer-card
+    params: 29.6B dense, vision
+    context_window: 131072
+    license: apache-2.0
+    released: 2026-08
+    supersedes:
+    - llama4:scout
+    - llama4:maverick
+    local_tag_verified: true
+  nemotron-3.5-super:120b-a12b:
+    sources:
+    - ollama-nemotron-super
+    params: 120B total / 12B active hybrid MoE, vision
+    context_window: 1048576
+    license: openmdw-1.1
+    released: 2026-10
+    local_tag_verified: true
+  mistral-medium-3.5:128b:
+    sources:
+    - ollama-mistral-medium
+    - mistral-medium-card
+    params: 128B dense, vision
+    context_window: 262144
+    license: modified-mit
+    local_tag_verified: true
+removed:
+  cloud:
+  - gpt-6-sol
+  - gpt-5.6-sol
+  - gpt-5.6-terra
+  - gpt-5.6-luna
+  - claude-fable-5
+  - claude-opus-4-8
+  - claude-sonnet-5
+  - claude-haiku-4-5-20251001
+  - gemini-3.1-pro-preview
+  - gemini-3-flash-preview
+  - gemini-3.1-flash-lite-preview
+  local:
+    qwen3.6:35b-a3b: superseded by the Qwen3.8 generation
+    qwen3.6:27b: superseded by qwen3.8:27b
+    llama4:scout: superseded by muse-glimmer:30b
+    llama4:maverick: superseded by muse-glimmer:30b
+    deepseek-v3.2:671b: Ollama page retired 2026-07-15; V4 and V4.1 are cloud-only on Ollama
+    mistral-large-3:675b: local tag no longer published; Mistral Large 4 is cloud-only on Ollama
+    mistral-small-4:119b: no Ollama library page
+not_included:
+  ollama_cloud_tags: deepseek-v4-pro, deepseek-v4.1-flash, mistral-large-4 and muse-spark-open exist on
+    Ollama only as :cloud tags, which run on Ollama's servers; routing treats the ollama provider as local,
+    so they are excluded.
+  nemotron-3.5-lightning: license and release date could not be verified
+  claude-mythos-5-1: available only to organizations verified through Anthropic's programs

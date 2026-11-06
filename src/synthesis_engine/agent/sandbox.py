@@ -286,7 +286,7 @@ class E2BSandbox(Sandbox):
         try:
             # The SDK is blocking; run it in a thread so the asyncio
             # event loop stays responsive.
-            return await asyncio.get_event_loop().run_in_executor(
+            return await asyncio.get_running_loop().run_in_executor(
                 None,
                 self._run_blocking,
                 E2BSdkSandbox,

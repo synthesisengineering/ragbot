@@ -5,14 +5,14 @@ from synthesis_engine.llm.base import LLMRequest
 from synthesis_engine.llm.direct_backend import DirectBackend
 from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
 
-CASES=[('openai/gpt-6-sol','openai','gpt-6-sol','max_completion_tokens'),('anthropic/claude-fable-5-1','anthropic','claude-fable-5-1','max_tokens')]
+CASES=[('openai/gpt-6.1-sol','openai','gpt-6.1-sol','max_completion_tokens'),('anthropic/claude-fable-5-1','anthropic','claude-fable-5-1','max_tokens')]
 
 def serialize(provider,kwargs):
  bodies=[]
  if provider=='openai':
   import openai,httpx
   def respond(req):
-   bodies.append(json.loads(req.content));return httpx.Response(200,json={'id':'fixture','object':'chat.completion','created':0,'model':'gpt-6-sol','choices':[]})
+   bodies.append(json.loads(req.content));return httpx.Response(200,json={'id':'fixture','object':'chat.completion','created':0,'model':'gpt-6.1-sol','choices':[]})
   with httpx.Client(transport=httpx.MockTransport(respond)) as http:
    with openai.OpenAI(api_key='synthetic',base_url='https://fixture.invalid',http_client=http) as client:client.chat.completions.create(**kwargs)
  else:
@@ -60,7 +60,7 @@ def test_bare_native_identifiers_do_not_escape_contract(model,provider,native,li
  backend=object.__new__(DirectBackend)
  with pytest.raises(ValueError):(backend._build_openai_kwargs if provider=='openai' else backend._build_anthropic_kwargs)(req)
 
-@pytest.mark.parametrize('model',['openai/gpt-6-astra','openai/gpt-6-sol','openai/gpt-6-luna','anthropic/claude-fable-5-1','anthropic/claude-opus-5-5','gemini/gemini-3.8-flash','gemini/gemini-3.5-flash-lite'])
+@pytest.mark.parametrize('model',['openai/gpt-6-astra','openai/gpt-6.1-sol','openai/gpt-6.1-terra','openai/gpt-6-luna','anthropic/claude-fable-5-1','anthropic/claude-opus-5-5','anthropic/claude-sonnet-5-5','anthropic/claude-haiku-5-5','gemini/gemini-4-argon','gemini/gemini-3.8-flash','gemini/gemini-3.5-flash-lite'])
 def test_registration_preserves_every_unrelated_field_and_all_prices(model):
  import litellm
  from synthesis_engine.llm.model_parameters import register_litellm_capabilities
@@ -79,10 +79,10 @@ def test_registration_preserves_every_unrelated_field_and_all_prices(model):
 def test_registration_foreign_alias_collision_has_no_side_effect(monkeypatch):
  import litellm
  from synthesis_engine.llm.model_parameters import register_litellm_capabilities
- monkeypatch.setitem(litellm.model_cost,'gpt-6-sol',{'litellm_provider':'another-provider','max_input_tokens':37,'input_cost_per_token':0.123})
+ monkeypatch.setitem(litellm.model_cost,'gpt-6.1-sol',{'litellm_provider':'another-provider','max_input_tokens':37,'input_cost_per_token':0.123})
  before=copy.deepcopy(litellm.model_cost)
- try:register_litellm_capabilities('openai/gpt-6-sol')
+ try:register_litellm_capabilities('openai/gpt-6.1-sol')
  except ValueError:assert litellm.model_cost==before
  else:
-  assert litellm.model_cost['gpt-6-sol']==before['gpt-6-sol']
-  assert litellm.model_cost['openai/gpt-6-sol']['litellm_provider']=='openai'
+  assert litellm.model_cost['gpt-6.1-sol']==before['gpt-6.1-sol']
+  assert litellm.model_cost['openai/gpt-6.1-sol']['litellm_provider']=='openai'

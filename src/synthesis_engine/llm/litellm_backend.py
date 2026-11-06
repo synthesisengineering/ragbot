@@ -62,13 +62,6 @@ def _provider_for(model: str) -> str:
     return PROVIDER_UNKNOWN
 
 
-# Version-aware Claude generation predicates are shared across backends and
-# the chat core — see synthesis_engine.llm.base. (A hardcoded substring list
-# here silently regressed the moment engines.yaml moved past the 4.7 line.)
-from .base import claude_rejects_temperature as _claude_rejects_temperature
-from .base import is_claude_4_7_or_newer as _is_claude_4_7_or_newer
-
-
 def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
     """Translate a generic LLMRequest into litellm.completion kwargs.
 
@@ -88,15 +81,15 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
         "messages": messages,
         "api_key": req.api_key,
     }
-    if req.temperature is not None and not (
-        _is_anthropic_model(req.model) and _claude_rejects_temperature(req.model)
-    ):
-        # Claude 4.8+ / 5.x rejects the temperature parameter outright.
+    anthropic = _is_anthropic_model(req.model)
+    if req.temperature is not None and not anthropic:
+        # Anthropic's API (version 2026-10-21) rejects sampling parameters
+        # for every model.
         kwargs["temperature"] = req.temperature
 
-    # GPT-5.x uses max_completion_tokens, not max_tokens.
-    model_lower = req.model.lower()
-    if "gpt-5" in model_lower or "gpt5" in model_lower:
+    # OpenAI's current models are reasoning models and take
+    # max_completion_tokens; every other provider takes max_tokens.
+    if _provider_for(req.model) == PROVIDER_OPENAI:
         kwargs["max_completion_tokens"] = req.max_tokens
     else:
         kwargs["max_tokens"] = req.max_tokens
@@ -111,27 +104,18 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
         if org:
             kwargs["organization"] = org
 
-    # Reasoning / thinking handling.
+    # Reasoning / thinking handling. Anthropic models take adaptive thinking
+    # with the effort in output_config; everything else takes
+    # reasoning_effort, which LiteLLM maps to the provider's own control.
     if req.thinking is not None:
         # Caller provided the provider-native shape; pass it through.
         kwargs["thinking"] = req.thinking
-        if _is_anthropic_model(req.model) and not _claude_rejects_temperature(req.model):
-            kwargs["temperature"] = 1.0
     elif req.reasoning_effort:
-        if _is_anthropic_model(req.model) and _is_claude_4_7_or_newer(req.model):
-            # LiteLLM through 1.83.13 sends the older ``thinking.type.enabled``
-            # shape via reasoning_effort. Claude 4.7+ rejects that — use
-            # the new adaptive shape directly.
+        if anthropic:
             kwargs["thinking"] = {"type": "adaptive"}
-            if not _claude_rejects_temperature(req.model):
-                # 4.7 requires temp=1 alongside thinking; 4.8+/5.x rejects
-                # the parameter entirely.
-                kwargs["temperature"] = 1.0
+            kwargs["output_config"] = {"effort": req.reasoning_effort}
         else:
             kwargs["reasoning_effort"] = req.reasoning_effort
-            if _is_anthropic_model(req.model):
-                # Claude 4.5/4.6 with reasoning_effort still requires temp=1.
-                kwargs["temperature"] = 1.0
 
     # Free-form passthrough (last so it can override anything above).
     # We strip the substrate-internal cache_control config keys so they

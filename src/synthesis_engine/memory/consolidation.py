@@ -78,7 +78,7 @@ def consolidate_session(
     workspace: str,
     *,
     llm_backend: Optional[LLMBackend] = None,
-    model: str = "anthropic/claude-haiku-4-5",
+    model: Optional[str] = None,
     extractor: Optional[Callable[[str], Dict[str, Any]]] = None,
     transcript: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -91,7 +91,8 @@ def consolidate_session(
         workspace: Workspace the consolidated facts belong to.
         llm_backend: Optional explicit backend. Defaults to the cached
             singleton from ``synthesis_engine.llm.get_llm_backend()``.
-        model: LLM model id (matches engines.yaml ids).
+        model: LLM model id (matches engines.yaml ids). Defaults to the
+            default provider's bulk-tier model.
         extractor: Optional override that takes the session transcript
             and returns the extraction JSON directly. Used by tests and
             by deterministic rule-based consolidators that don't need
@@ -117,6 +118,10 @@ def consolidate_session(
         extraction = extractor(text)
     else:
         backend = llm_backend or get_llm_backend()
+        if model is None:
+            from ..config import get_default_model_for_tier
+
+            model = get_default_model_for_tier("bulk")
         extraction = _llm_extract(backend, model, text)
 
     provenance = Provenance(

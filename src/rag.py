@@ -32,7 +32,7 @@ import re
 import json
 import math
 import logging
-from typing import Optional, Dict, List, Tuple, Any, Set
+from typing import Optional, Dict, List, Tuple, Any
 
 # Vector store abstraction (pgvector backend behind a common ABC).
 # Importing at module load time so callers can rely on get_vector_store().
@@ -50,7 +50,6 @@ except ImportError:  # pragma: no cover - import guard for partial installs
     VECTOR_STORE_AVAILABLE = False
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from collections import Counter
 
 # Configure logging
@@ -803,7 +802,7 @@ def _get_fast_model(user_model: Optional[str] = None) -> Optional[str]:
     model from the same provider, ensuring consistent API key usage.
 
     Args:
-        user_model: User's selected model ID (e.g., 'anthropic/claude-fable-5')
+        user_model: User's selected model ID (e.g., 'anthropic/claude-fable-5-1')
 
     Returns:
         Fast model ID for the same provider, or None if not found

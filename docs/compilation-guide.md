@@ -160,7 +160,7 @@ When using Ragbot (CLI or Web UI), the correct instruction file is **automatical
 | Model Type | Instruction File |
 |------------|------------------|
 | Anthropic models (Claude) | `instructions/claude.md` |
-| OpenAI models (GPT-5.x) | `instructions/chatgpt.md` |
+| OpenAI models (GPT) | `instructions/chatgpt.md` |
 | Google models (Gemini) | `instructions/gemini.md` |
 
 ### Mid-Conversation Model Switching

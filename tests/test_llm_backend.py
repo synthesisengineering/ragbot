@@ -28,7 +28,7 @@ from synthesis_engine.llm import (  # noqa: E402
 
 class TestLLMRequest:
     def test_defaults_are_safe(self):
-        r = LLMRequest(model="anthropic/claude-sonnet-5", messages=[])
+        r = LLMRequest(model="anthropic/claude-sonnet-5-5", messages=[])
         assert r.temperature is None
         assert r.max_tokens == 4096
         assert r.api_key is None
@@ -102,80 +102,56 @@ class TestBackendSelection:
 
 
 class TestLiteLLMKwargsBuilder:
-    """Verify the request → litellm.completion kwargs translation."""
+    """Verify the request → litellm.completion kwargs translation.
 
-    def _build(self, **overrides):
+    Catalog models also pass through their verified request contract
+    (tests/test_catalog_refresh.py). These cases cover the provider rules
+    that apply to every model id, including ids engines.yaml does not list.
+    """
+
+    LOCAL = "ollama_chat/gemma4:31b"
+
+    def _build(self, model=LOCAL, **overrides):
         from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        req = LLMRequest(model="anthropic/claude-sonnet-5", messages=[{"role": "user", "content": "hi"}])
+        req = LLMRequest(model=model, messages=[{"role": "user", "content": "hi"}])
         for k, v in overrides.items():
             setattr(req, k, v)
         return _build_completion_kwargs(req)
 
-    def test_max_tokens_for_non_gpt5(self):
+    def test_max_tokens_for_non_openai(self):
         out = self._build(max_tokens=512)
         assert out["max_tokens"] == 512
         assert "max_completion_tokens" not in out
 
-    def test_max_completion_tokens_for_gpt5(self):
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        req = LLMRequest(model="openai/gpt-5.6-terra", messages=[], max_tokens=512)
-        out = _build_completion_kwargs(req)
+    @pytest.mark.parametrize("model", ["openai/gpt-6.1-sol", "openai/a-future-model"])
+    def test_openai_takes_max_completion_tokens(self, model):
+        out = self._build(model=model, max_tokens=512)
         assert out["max_completion_tokens"] == 512
         assert "max_tokens" not in out
 
-    def test_pre_4_7_anthropic_reasoning_effort_forces_temperature_one(self):
-        # Haiku 4.5 (pre-4.7) still routes through LiteLLM's reasoning_effort
-        # mapper, which requires temperature=1 on Anthropic.
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        req = LLMRequest(
-            model="anthropic/claude-haiku-4-5-20251001",
-            messages=[],
-            reasoning_effort="medium",
-        )
-        out = _build_completion_kwargs(req)
-        assert out["reasoning_effort"] == "medium"
-        assert out["temperature"] == 1.0
+    def test_temperature_passes_for_local_models(self):
+        assert self._build(temperature=0.3)["temperature"] == 0.3
 
-    def test_claude_4_7_uses_adaptive_thinking_shape_with_temp(self):
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        req = LLMRequest(
-            model="anthropic/claude-opus-4-7",
-            messages=[],
-            reasoning_effort="high",
-        )
-        out = _build_completion_kwargs(req)
-        # 4.7 skips reasoning_effort, sends adaptive thinking + temp=1.
+    def test_anthropic_never_receives_temperature(self):
+        # API version 2026-10-21 rejects sampling parameters for every model.
+        out = self._build(model="anthropic/a-future-claude", temperature=0.3)
+        assert "temperature" not in out
+
+    def test_anthropic_effort_uses_adaptive_thinking_and_output_config(self):
+        out = self._build(model="anthropic/a-future-claude", reasoning_effort="medium")
         assert out["thinking"] == {"type": "adaptive"}
-        assert out["temperature"] == 1.0
+        assert out["output_config"] == {"effort": "medium"}
         assert "reasoning_effort" not in out
-
-    def test_claude_4_8_and_5_x_adaptive_shape_without_temperature(self):
-        # Claude 4.8+/5.x rejects the temperature parameter entirely
-        # (400 "`temperature` is deprecated for this model").
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        for model in ("anthropic/claude-opus-4-8", "anthropic/claude-fable-5"):
-            req = LLMRequest(model=model, messages=[], reasoning_effort="high")
-            out = _build_completion_kwargs(req)
-            assert out["thinking"] == {"type": "adaptive"}
-            assert "temperature" not in out
-            assert "reasoning_effort" not in out
+        assert "temperature" not in out
 
     def test_explicit_thinking_passes_through(self):
-        out = self._build(thinking={"type": "adaptive", "budget_tokens": 8000})
-        assert out["thinking"] == {"type": "adaptive", "budget_tokens": 8000}
-        # Default model is Sonnet 5 (4.8+): temperature is never sent.
+        out = self._build(model="anthropic/a-future-claude", thinking={"type": "adaptive"})
+        assert out["thinking"] == {"type": "adaptive"}
         assert "temperature" not in out
 
     def test_gemini_reasoning_effort_does_not_force_temperature(self):
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
-        req = LLMRequest(
-            model="gemini/gemini-3.1-pro-preview",
-            messages=[],
-            reasoning_effort="medium",
-        )
-        out = _build_completion_kwargs(req)
+        out = self._build(model="gemini/gemini-4-argon", reasoning_effort="medium")
         assert out["reasoning_effort"] == "medium"
-        # Gemini doesn't share the Anthropic temp=1 rule.
         assert "temperature" not in out
 
     def test_extra_kwargs_pass_through_and_override(self):
@@ -185,31 +161,20 @@ class TestLiteLLMKwargsBuilder:
         assert out["max_tokens"] == 999
 
     def test_openai_organization_from_env(self, monkeypatch):
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
         monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
-        req = LLMRequest(model="openai/gpt-5.6-terra", messages=[])
-        out = _build_completion_kwargs(req)
-        assert out["organization"] == "org-payer123"
+        assert self._build(model="openai/gpt-6.1-sol")["organization"] == "org-payer123"
 
     def test_openai_organization_absent_without_env(self, monkeypatch):
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
         monkeypatch.delenv("OPENAI_ORGANIZATION", raising=False)
-        req = LLMRequest(model="openai/gpt-5.6-terra", messages=[])
-        out = _build_completion_kwargs(req)
-        assert "organization" not in out
+        assert "organization" not in self._build(model="openai/gpt-6.1-sol")
 
     def test_openai_organization_ignored_for_other_providers(self, monkeypatch):
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
         monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
-        req = LLMRequest(model="anthropic/claude-sonnet-5", messages=[])
-        out = _build_completion_kwargs(req)
-        assert "organization" not in out
+        assert "organization" not in self._build(model="anthropic/claude-sonnet-5-5")
 
     def test_openai_organization_extra_override_wins(self, monkeypatch):
-        from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
         monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
-        req = LLMRequest(model="gpt-5.6-terra", messages=[], extra={"organization": "org-explicit"})
-        out = _build_completion_kwargs(req)
+        out = self._build(model="gpt-6.1-sol", extra={"organization": "org-explicit"})
         assert out["organization"] == "org-explicit"
 
 

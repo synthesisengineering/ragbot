@@ -257,7 +257,7 @@ A SynthesisReport that synthesizes a question across `acme-news` (PUBLIC) and `a
     "Effective confidentiality: PERSONAL",
     "Audit required: no audit (PUBLIC + PERSONAL is within policy)",
     "Tools fired: cross_workspace_synthesize, three_tier_retrieve_multi, llm.complete",
-    "Model id: anthropic/claude-opus-4-7",
+    "Model id: anthropic/claude-fable-5-1",
     "Per-workspace block counts: acme-news=3, acme-user=2"
   ],
   "effective_confidentiality": "PERSONAL"

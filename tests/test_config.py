@@ -302,8 +302,9 @@ class TestModelMetadata:
         models = get_all_models()
         flat = {m['id']: m for provider in models.values() for m in provider}
 
-        assert flat.get('anthropic/claude-opus-4-8', {}).get('display_name') == 'Claude Opus 4.8'
-        assert flat.get('openai/gpt-5.6-terra', {}).get('display_name') == 'GPT-5.6 Terra'
+        assert flat.get('anthropic/claude-opus-5-5', {}).get('display_name') == 'Claude Opus 5.5'
+        assert flat.get('openai/gpt-6.1-terra', {}).get('display_name') == 'GPT-6.1 Terra'
+        assert flat.get('gemini/gemini-4-argon', {}).get('display_name') == 'Gemini 4 Argon'
         assert flat.get('ollama_chat/gemma4:31b', {}).get('display_name') == 'Gemma 4 31B'
 
     def test_supports_thinking_reflects_engines_yaml(self):
@@ -311,12 +312,13 @@ class TestModelMetadata:
         models = get_all_models()
         flat = {m['id']: m for provider in models.values() for m in provider}
 
-        # Claude Opus 4.8 has thinking.supported: true in engines.yaml.
-        assert flat.get('anthropic/claude-opus-4-8', {}).get('supports_thinking') is True
-        # Claude Haiku 4.5 does not have a thinking block.
-        assert flat.get('anthropic/claude-haiku-4-5-20251001', {}).get('supports_thinking') is True
-        # GPT-5.4 mini does not have a thinking block.
-        assert flat.get('openai/gpt-5.6-luna', {}).get('supports_thinking') is False
+        # Every cloud model in the catalog declares thinking support.
+        assert flat.get('anthropic/claude-opus-5-5', {}).get('supports_thinking') is True
+        assert flat.get('anthropic/claude-haiku-5-5', {}).get('supports_thinking') is True
+        assert flat.get('openai/gpt-6-luna', {}).get('supports_thinking') is True
+        # Qwen3.8 declares hybrid thinking; Gemma 4 entries carry no thinking block.
+        assert flat.get('ollama_chat/qwen3.8:27b', {}).get('supports_thinking') is True
+        assert flat.get('ollama_chat/gemma4:31b', {}).get('supports_thinking') is False
 
     def test_is_local_is_true_only_for_ollama(self):
         """Only Ollama models are local; cloud-provider models are not."""

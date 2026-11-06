@@ -376,6 +376,7 @@ def _resolve_response(case: EvalCase) -> Tuple[Optional[str], Optional[str]]:
         return None, "live case skipped — no API key in environment"
 
     try:
+        from synthesis_engine.config import get_default_model_for_tier  # type: ignore
         from synthesis_engine.llm import get_llm_backend  # type: ignore
         from synthesis_engine.llm.base import LLMRequest  # type: ignore
     except Exception as exc:
@@ -383,8 +384,10 @@ def _resolve_response(case: EvalCase) -> Tuple[Optional[str], Optional[str]]:
 
     try:
         backend = get_llm_backend()
+        # RAGBOT_EVAL_MODEL overrides; otherwise the default provider's bulk
+        # tier from engines.yaml.
         req = LLMRequest(
-            model=os.environ.get("RAGBOT_EVAL_MODEL", "anthropic/claude-haiku-4-5"),
+            model=os.environ.get("RAGBOT_EVAL_MODEL") or get_default_model_for_tier("bulk"),
             messages=[{"role": "user", "content": case.prompt}],
             max_tokens=512,
             temperature=0.0,

@@ -38,12 +38,24 @@ cp .env.example .env
 # RAGBOT_DATABASE_URL is auto-derived from POSTGRES_USER/POSTGRES_PASSWORD.
 ```
 
-Docker Compose will start a Postgres 16 container (image `pgvector/pgvector:pg16`) alongside ragbot-api. The schema is applied automatically on first connection. Verify with:
+Docker Compose will start a PostgreSQL 18 container (image `pgvector/pgvector:pg18`) alongside ragbot-api, with its data in the `ragbot-postgres-18-data` volume. The schema is applied automatically on first connection. Verify with:
 
 ```bash
 docker compose up -d postgres
 docker compose exec postgres psql -U ragbot -d ragbot -c "SELECT extversion FROM pg_extension WHERE extname='vector';"
 ```
+
+#### Moving an existing PostgreSQL 16 database to 18
+
+Stacks created before 2026-11-06 kept their data in the `ragbot-postgres-data` volume on PostgreSQL 16, which PostgreSQL 18 cannot open. Copy it across once, before starting ragbot-api on the new image:
+
+```bash
+docker compose stop ragbot-api
+scripts/migrate-postgres-16-to-18.sh
+docker compose up -d
+```
+
+The script dumps the old database from a temporary PostgreSQL 16 container, restores it into the new volume, and compares row counts table by table. It refuses to write into a PostgreSQL 18 database that already has tables, and it never changes the old volume; remove that with `docker volume rm` once you no longer need it.
 
 ### 3. Build and Start the Web Interface
 

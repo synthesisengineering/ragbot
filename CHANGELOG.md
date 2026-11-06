@@ -1,5 +1,68 @@
 # Changelog
 
+## 4.0.0 — 2026-11-06
+
+Ragbot moves every dependency, runtime and model to its latest release. Backward
+compatibility with superseded models, runtimes and SDK versions is not kept.
+
+### Changed
+
+- **Models.** `engines.yaml` carries only current models, verified against provider
+  documentation on 2026-11-06 (`docs/model-catalog-2026-11-06.yaml`):
+  - OpenAI: GPT-6 Astra, GPT-6.1 Sol (default), GPT-6.1 Terra, GPT-6 Luna.
+  - Anthropic: Claude Fable 5.1, Opus 5.5, Sonnet 5.5 (default), Haiku 5.5.
+  - Google: Gemini 4 Argon, 3.8 Flash (default), 3.5 Flash-Lite.
+  - Local (Ollama): Gemma 4 (E4B, 12B, 26B, 31B), Qwen3.8 27B, the Qwen3.8 Flash-Next
+    preview, Muse Glimmer 30B, Nemotron 3.5 Super, Mistral Medium 3.5.
+
+  Every cloud model has a strict request contract. Superseded models are removed,
+  including `gemini-3.1-flash-lite-preview`, which Google shut down on 2026-05-25, and
+  three local tags Ollama no longer serves locally.
+- **MCP SDK 2.x** (#157). The client primitives, tasks, transports, OAuth callback, proxy
+  and Ragbot's MCP server are ported to mcp 2.3.0.
+- **Runtimes and images.**
+  - Python 3.14 in CI and the backend image, which no longer installs a compiler.
+  - Node 26 (active LTS) in CI and the web image.
+  - PostgreSQL 18 with pgvector 0.8.7 on a new volume;
+    `scripts/migrate-postgres-16-to-18.sh` copies an existing database across.
+  - Jaeger v2.
+- **Python packages.** Every floor is raised to the latest release; openai 3.x is allowed now
+  that LiteLLM 1.108+ accepts it; `google-generativeai` (end of life) is removed, freeing
+  protobuf 7; `appdirs` is replaced by `platformdirs`.
+- **Web packages.** Every package is on its latest release (Next.js 16.4.5, React 19.3.1,
+  jsdom 31). TypeScript stays on 6.0 because typescript-eslint does not yet accept 7.
+- **Request handling.**
+  - Anthropic requests never carry sampling parameters, and effort travels in
+    `output_config`.
+  - Gemini thinking is set by level, never by budget.
+  - OpenAI requests use `max_completion_tokens`.
+
+  The Claude version heuristics for superseded models are gone.
+- **Defaults come from `engines.yaml`.** The chat API default, the memory consolidator, cross-workspace synthesis and the eval runner no longer name models in code.
+
+### Fixed
+
+- `local_only` and downgrade-to-local workspace policies recognised no configured local
+  model and suggested models that did not exist. Local models are now those `engines.yaml`
+  serves through Ollama, and Ollama `:cloud` tags are never treated as local.
+- The agent loop read an attribute mcp 2.x no longer has, which would have passed MCP tool
+  errors through as successful output.
+- The MCP server's HTTP transport resolves bearer tokens from the request it serves,
+  starts its session manager through the ASGI lifespan, and fails closed.
+- The OAuth callback page escaped nothing in its error message.
+- `npm audit` reports 0 vulnerabilities, down from 22 (1 critical), and CI now runs
+  `next build`.
+
+### Security
+
+- Next.js advisories covering 16.0.0–16.4.0 (two unauthenticated remote code execution
+  issues among them) are resolved. Transitive advisories (sharp, brace-expansion,
+  minimatch, postcss-selector-parser, vite, zod, undici) are cleared by overrides and
+  lockfile updates.
+- Still open: 13 CVEs in `filelock` 3.32.7. LiteLLM 1.108.1 caps it below 4; the next
+  stable LiteLLM is expected to lift the cap (1.109.0rc1 already has). See
+  `docs/security/dependabot-triage-2026-11.md`.
+
 ## 3.8.1 — 2026-09-25
 
 Refresh the verified model catalog and expose model-specific thinking options in the API and settings UI. Validate explicit model, reasoning and output limits after provider extension merging. Keep unrelated LiteLLM pricing and input allowances unchanged when registering reasoning capabilities. Existing user preferences remain explicit inputs.

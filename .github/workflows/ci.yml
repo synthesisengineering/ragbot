@@ -40,17 +40,17 @@ permissions:
 
 jobs:
   python:
-    name: python (3.12)
+    name: python (3.14)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
-          # No requires-python is declared anywhere in the repository, so this
-          # pins the version the suite is actually verified against rather
-          # than inheriting whatever the runner defaults to.
-          python-version: "3.12"
+          # The version the suite is verified against, and the one the
+          # backend image runs (python:3.14-slim). 3.14 is the newest release
+          # every dependency ships wheels for; see the Dockerfile.
+          python-version: "3.14"
           cache: pip
           cache-dependency-path: requirements.txt
 
@@ -80,7 +80,7 @@ jobs:
         run: make test-fast
 
   web:
-    name: web (node 22)
+    name: web (node 26)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -90,7 +90,8 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          # Matches the web image (node:26-alpine), the active LTS line.
+          node-version: "26"
           cache: npm
           cache-dependency-path: web/package-lock.json
 
@@ -105,7 +106,7 @@ jobs:
       # things worse when forced — see docs/security/dependabot-triage-2026-09.md.
       # If this step ever fails on a missing optional package again, regenerate
       # the lockfile in a Linux container rather than on a developer machine:
-      #   docker run --rm -v "$PWD:/w" -w /w node:22 npm install --package-lock-only
+      #   docker run --rm -v "$PWD:/w" -w /w node:26 npm install --package-lock-only
       # The current lockfile is verified to satisfy `npm ci` on both Linux and
       # macOS, so the container is a repair tool, not part of the normal flow.
       - name: Install dependencies

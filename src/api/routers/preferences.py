@@ -39,7 +39,7 @@ router = APIRouter(prefix="/api/preferences", tags=["preferences"])
 
 
 class ModelIdList(BaseModel):
-    """A list of canonical model IDs (e.g. ``anthropic/claude-opus-4-7``)."""
+    """A list of canonical model IDs (e.g. ``anthropic/claude-opus-5-5``)."""
     model_ids: List[str] = Field(default_factory=list)
 
 

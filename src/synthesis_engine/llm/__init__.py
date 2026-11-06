@@ -50,6 +50,8 @@ import logging
 import os
 from typing import Dict, Optional, Tuple
 
+from ..config import get_local_model_ids
+from ..exceptions import ConfigurationError
 from ..policy import (
     AllowanceCheck,
     Confidentiality,
@@ -68,18 +70,6 @@ logger = logging.getLogger(__name__)
 
 
 _BACKEND: Optional[LLMBackend] = None
-
-
-# Curated short-list of local-model ids used when a workspace's
-# ``DOWNGRADE_TO_LOCAL`` fallback is exercised but the workspace itself
-# declares no explicit allowed_models. Kept in sync with the
-# ``_LOCAL_MODEL_PATTERNS`` in :mod:`synthesis_engine.policy.routing`.
-_DEFAULT_LOCAL_FALLBACKS: Tuple[str, ...] = (
-    "gemma/gemma-4-27b",
-    "qwen3/qwen3-32b",
-    "llama-3.3-70b-instruct",
-    "deepseek/deepseek-v3.1",
-)
 
 
 class ModelDeniedError(Exception):
@@ -174,10 +164,10 @@ def _pick_local_fallback(policy: RoutingPolicy) -> str:
     ``policy.allowed_models`` so the downgrade respects the operator's
     declared shortlist. Glob entries (anything containing ``*`` or
     ``?``) are skipped here because the resolved id has to be a
-    dispatchable model name, not a pattern. Falls back to the curated
-    default list when the policy is allowlist-empty or contains only
-    globs. We don't raise from this helper so the routing decision
-    stays in one place.
+    dispatchable model name, not a pattern. Falls back to the local
+    models engines.yaml configures (its default local model first) when
+    the policy is allowlist-empty or contains only globs. We don't raise
+    from this helper so the routing decision stays in one place.
     """
 
     def _is_concrete(model_id: str) -> bool:
@@ -192,20 +182,26 @@ def _pick_local_fallback(policy: RoutingPolicy) -> str:
         if verdict.allowed:
             return candidate
 
-    # Fall back to the curated default list. Re-check each through
+    # Fall back to the configured local models. Re-check each through
     # is_model_allowed so the fallback respects the policy's own deny
-    # rules (a policy can deny ``gemma/*`` even while requiring
+    # rules (a policy can deny one local family while requiring
     # local_only, in which case the next candidate wins).
-    for candidate in _DEFAULT_LOCAL_FALLBACKS:
+    local_models = get_local_model_ids()
+    for candidate in local_models:
         verdict = is_model_allowed(policy, candidate)
         if verdict.allowed:
             return candidate
 
-    # As a last resort, return the curated default's first entry. The
-    # caller will see ``is_model_allowed=False`` and can decide whether
-    # to deny or proceed with a warning; we don't raise from this helper
-    # so the routing decision stays in one place.
-    return _DEFAULT_LOCAL_FALLBACKS[0]
+    # As a last resort, return the default local model. The caller will
+    # see ``is_model_allowed=False`` and can decide whether to deny or
+    # proceed with a warning; we don't raise from this helper so the
+    # routing decision stays in one place.
+    if not local_models:
+        raise ConfigurationError(
+            "A workspace policy asked to downgrade to a local model, but "
+            "engines.yaml configures no local models."
+        )
+    return local_models[0]
 
 
 def get_routed_llm_backend(

@@ -19,7 +19,7 @@ Example usage:
     response = chat(
         prompt="Hello!",
         workspace_name="personal",
-        model="anthropic/claude-sonnet-4-20250514"
+        model="anthropic/claude-sonnet-5-5"
     )
 """
 

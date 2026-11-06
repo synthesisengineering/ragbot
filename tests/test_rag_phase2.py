@@ -36,17 +36,17 @@ class TestGetFastModel:
 
     def test_get_fast_model_for_anthropic(self):
         """Fast model for Anthropic should be Haiku."""
-        fast = _get_fast_model('anthropic/claude-opus-4-5-20251101')
-        assert fast == 'anthropic/claude-haiku-4-5-20251001'
+        fast = _get_fast_model('anthropic/claude-opus-5-5')
+        assert fast == 'anthropic/claude-haiku-5-5'
 
     def test_get_fast_model_for_openai(self):
         """Fast model for OpenAI should be the bulk-tier model from engines.yaml."""
-        fast = _get_fast_model('openai/gpt-5.6-terra')
+        fast = _get_fast_model('openai/gpt-6.1-terra')
         assert fast == 'openai/gpt-6-luna'
 
     def test_get_fast_model_for_google(self):
         """Fast model for Google should be the bulk-tier Gemini Flash Lite."""
-        fast = _get_fast_model('gemini/gemini-3.1-pro-preview')
+        fast = _get_fast_model('gemini/gemini-4-argon')
         assert fast == 'gemini/gemini-3.5-flash-lite'
 
     def test_get_fast_model_falls_back_to_default(self):
@@ -58,8 +58,8 @@ class TestGetFastModel:
 
     def test_get_fast_model_with_sonnet(self):
         """Fast model for Sonnet should also be Haiku (same provider)."""
-        fast = _get_fast_model('anthropic/claude-sonnet-4-20250514')
-        assert fast == 'anthropic/claude-haiku-4-5-20251001'
+        fast = _get_fast_model('anthropic/claude-sonnet-5-5')
+        assert fast == 'anthropic/claude-haiku-5-5'
 
 
 class TestPlannerPrompt:
@@ -331,9 +331,9 @@ class TestProviderAgnosticIntegration:
     def test_different_providers_use_their_fast_models(self):
         """Each provider should use its own fast model, not hardcoded Haiku."""
         # Test that we're not hardcoding "haiku" but using categories
-        fast_anthropic = _get_fast_model('anthropic/claude-sonnet-5')
-        fast_openai = _get_fast_model('openai/gpt-5.6-terra')
-        fast_google = _get_fast_model('gemini/gemini-3.1-pro-preview')
+        fast_anthropic = _get_fast_model('anthropic/claude-sonnet-5-5')
+        fast_openai = _get_fast_model('openai/gpt-6.1-terra')
+        fast_google = _get_fast_model('gemini/gemini-4-argon')
 
         # Each should be different (different providers)
         assert fast_anthropic != fast_openai
@@ -355,9 +355,9 @@ class TestProviderAgnosticIntegration:
         google_bulk = get_model_by_tier('google', 'bulk')
 
         # These should match _get_fast_model results
-        assert anthropic_bulk == _get_fast_model('anthropic/claude-opus-4-8')
-        assert openai_bulk == _get_fast_model('openai/gpt-5.6-terra')
-        assert google_bulk == _get_fast_model('gemini/gemini-3.1-pro-preview')
+        assert anthropic_bulk == _get_fast_model('anthropic/claude-opus-5-5')
+        assert openai_bulk == _get_fast_model('openai/gpt-6.1-terra')
+        assert google_bulk == _get_fast_model('gemini/gemini-4-argon')
 
 
 class TestFallbackBehavior:

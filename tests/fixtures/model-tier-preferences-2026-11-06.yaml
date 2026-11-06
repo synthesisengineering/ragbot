@@ -19,7 +19,7 @@
 #
 # Naming history: v1.x used frontier/efficient/light. Renamed 2026-07-14
 # because the industry uses "frontier" to mean the whole current generation
-# (OpenAI applies it to all three GPT-5.6 models), colliding with our
+# (OpenAI applied it to the whole GPT-5.6 line), colliding with our
 # top-rung meaning. Full rationale: references/naming-rationale.md.
 #
 # Per role and provider, the role key holds an ORDERED PREFERENCE LIST:
@@ -45,56 +45,61 @@
 # Identifier and selector provenance: references/catalog-verification.yaml.
 
 version: 2
-updated: '2026-09-25'
+updated: '2026-11-06'
 verification: references/catalog-verification.yaml
 providers:
   anthropic:
-    verified: '2026-09-25'
+    verified: '2026-11-06'
     identifier_namespace: provider_api
     endpoint_availability: unknown
     judgment:
     - claude-fable-5-1
     - claude-opus-5-5
     routine:
-    - claude-sonnet-5
+    - claude-sonnet-5-5
     bulk:
-    - claude-haiku-4-5-20251001
+    - claude-haiku-5-5
   openai:
-    verified: '2026-09-25'
+    verified: '2026-11-06'
     identifier_namespace: provider_api
     endpoint_availability: unknown
     judgment:
     - gpt-6-astra
     routine:
-    - gpt-6-sol
+    - gpt-6.1-sol
+    - gpt-6.1-terra
     bulk:
     - gpt-6-luna
   google:
-    verified: '2026-09-25'
+    verified: '2026-11-06'
     identifier_namespace: litellm_gemini
     endpoint_availability: unknown
     judgment:
-    - gemini/gemini-3.1-pro-preview
+    - gemini/gemini-4-argon
     routine:
     - gemini/gemini-3.8-flash
     bulk:
     - gemini/gemini-3.5-flash-lite
   ollama:
-    verified: '2026-09-25'
+    verified: '2026-11-06'
     identifier_namespace: ollama_tag
     endpoint_availability: unknown
     hardware_fit: unknown
     judgment:
-    - qwen3.6:35b-a3b
     - gemma4:31b
+    - nemotron-3.5-super:120b-a12b
+    - mistral-medium-3.5:128b
+    - qwen3.8-flash-next:125b-a6b-q4_K_M
     routine:
+    - qwen3.8:27b
     - gemma4:26b
-    - qwen3.6:27b
+    - muse-glimmer:30b
     bulk:
+    - gemma4:12b
     - gemma4:e4b
 clients:
   gemini-api:
     google:
-      gemini/gemini-3.1-pro-preview: gemini-3.1-pro-preview
+      gemini/gemini-4-argon: gemini-4-argon
       gemini/gemini-3.8-flash: gemini-3.8-flash
       gemini/gemini-3.5-flash-lite: gemini-3.5-flash-lite

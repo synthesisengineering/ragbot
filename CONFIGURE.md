@@ -136,11 +136,11 @@ export RAGBOT_LLM_BACKEND=litellm
 export RAGBOT_LLM_BACKEND=direct
 ```
 
-Both backends honour the same provider quirks (GPT-5.x `max_completion_tokens`, Claude 4.7+ `thinking.type.adaptive`, Anthropic-thinking-requires-temp-1, etc.). Adding alternatives like Bifrost, Portkey, or OpenRouter is a single new file implementing `LLMBackend`.
+Both backends honour the same provider request rules (OpenAI's `max_completion_tokens`, Anthropic's adaptive thinking with `output_config` effort and no sampling parameters, Gemini's thinking levels). Adding alternatives like Bifrost, Portkey, or OpenRouter is a single new file implementing `LLMBackend`.
 
 ### Reasoning / thinking modes
 
-Flagship models with thinking support (Claude Opus 4.7, GPT-5.5-pro, Gemini 3.1 Pro) automatically use `reasoning_effort: medium`. Non-flagship thinking-capable models (Claude Sonnet 4.6, GPT-5.5, etc.) default to off but accept overrides. Models without a `thinking` block in `engines.yaml` (e.g., Claude Haiku 4.5, GPT-5.4-mini) silently ignore the parameter.
+Every cloud model in `engines.yaml` carries a strict reasoning contract: its effort defaults to the catalog value (for example `high` for Claude Fable 5.1 and Sonnet 5.5, `medium` for GPT-6.1 Sol and Gemini 4 Argon, `minimal` for Gemini 3.5 Flash-Lite), and an override must be one of the model's listed levels — an unsupported value is an error rather than a silent substitution. Local models with hybrid thinking (Qwen3.8, Nemotron 3.5 Super) send no thinking parameter unless you set one, which leaves the model's own default. Models without a `thinking` block (Gemma 4, Muse Glimmer, Mistral Medium 3.5) ignore the parameter.
 
 ```bash
 # Per-call override

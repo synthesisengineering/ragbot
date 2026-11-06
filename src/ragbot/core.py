@@ -79,72 +79,26 @@ def _resolve_thinking_for_model(
         return {}
 
     if effort is None or effort == "auto":
-        # Default policy:
-        #   • flagship models with thinking → medium
-        #   • non-flagship models that declare a discrete `modes:` list (e.g.
-        #     OpenAI / Gemini, where reasoning is always-on and "off" is not
-        #     a valid level) → the LOWEST listed mode, typically "minimal".
-        #     Sending nothing for these would let the provider apply its own
-        #     reasoning default, which on long-context RAG calls can consume
-        #     the entire output-token budget and produce empty content.
-        #   • everything else (Claude with `mode: adaptive`, or no thinking
-        #     metadata) → "off", which is handled below as "send no thinking
-        #     params at all" and lets the provider use its own neutral
-        #     default (Claude's adaptive mode is the safe choice there).
-        is_flagship = bool(info.get("is_flagship"))
-        if is_flagship:
-            effort = "medium"
-        else:
-            modes = thinking_meta.get("modes") or []
-            if modes and "off" not in modes:
-                effort = modes[0]
-            else:
-                effort = "off"
+        # Default policy for non-strict (local) models: flagships think at
+        # medium; everything else sends no thinking parameter, which leaves
+        # the model's own default in place (Qwen3.8 thinks by default, for
+        # example). Their `modes` name hybrid behaviours, not effort levels.
+        effort = "medium" if info.get("is_flagship") else "off"
 
     if effort == "off":
         return {}
 
-    model_lower = model.lower()
-    is_anthropic = model_lower.startswith("anthropic/") or "claude" in model_lower
-
-    # Claude 4.7+ uses the new ``thinking.type.adaptive`` API; LiteLLM
-    # versions through 1.83.x still emit the older ``thinking.type.enabled``
-    # shape via reasoning_effort, which the Anthropic API now rejects for
-    # 4.7+. Bypass the mapper and pass the canonical adaptive shape
-    # directly. Older Claude (4.5, 4.6) and non-Anthropic providers continue
-    # to use reasoning_effort, which LiteLLM maps appropriately.
-    #
-    # The check is version-aware rather than a substring list: every Claude
-    # generation at or beyond 4.7 (Opus 4.8, Sonnet 5, Fable 5, Mythos 5, ...)
-    # uses the adaptive shape. A hardcoded id list here silently regressed the
-    # moment engines.yaml moved past the 4.7 line.
-    from synthesis_engine.llm.base import (
-        claude_rejects_temperature,
-        is_claude_4_7_or_newer,
-    )
-
-    if is_anthropic and is_claude_4_7_or_newer(model_lower):
-        if claude_rejects_temperature(model_lower):
-            # 4.8+ / 5.x: adaptive shape only — the API rejects temperature.
-            return {"thinking": {"type": "adaptive"}}
-        return {"thinking": {"type": "adaptive"}, "temperature": 1.0}
-
-    out: Dict[str, Any] = {"reasoning_effort": effort}
-
-    # Anthropic constraint: extended thinking requires temperature=1. Other
-    # values are rejected by the API. Force the override here so callers
-    # don't have to remember the rule.
-    if is_anthropic:
-        out["temperature"] = 1.0
-
-    return out
+    # Only non-strict entries reach this point: every cloud model in
+    # engines.yaml carries a strict contract (handled above), so these are
+    # local models, whose servers take the cross-provider reasoning_effort.
+    return {"reasoning_effort": effort}
 
 
 def _get_api_key_for_model(model: str, workspace: Optional[str] = None) -> Optional[str]:
     """Get the appropriate API key for a model based on its provider.
 
     Args:
-        model: Model identifier (e.g., "anthropic/claude-sonnet-4-20250514")
+        model: Model identifier (e.g., "anthropic/claude-sonnet-5-5")
         workspace: Optional workspace for workspace-specific keys
 
     Returns:
@@ -263,7 +217,7 @@ def _get_engine_from_model(model: str) -> str:
     on model names (which would be fragile for future models like "opengpt").
 
     Args:
-        model: Model identifier (e.g., "anthropic/claude-sonnet-4", "gpt-5.2")
+        model: Model identifier (e.g., "anthropic/claude-sonnet-5-5", "openai/gpt-6.1-sol")
 
     Returns:
         Engine name ('anthropic', 'openai', or 'google')
@@ -347,7 +301,7 @@ def chat(
         curated_datasets: Context documents as a string (legacy, use RAG instead)
         custom_instructions: Custom instructions as a string (if empty and workspace
             provided, LLM-specific instructions are auto-loaded)
-        model: LLM model identifier (litellm format, e.g., "anthropic/claude-sonnet-4")
+        model: LLM model identifier (litellm format, e.g., "anthropic/claude-sonnet-5-5")
         max_tokens: Maximum tokens in the response
         max_input_tokens: Model's context window size (for history compaction)
         stream: Whether to stream the response

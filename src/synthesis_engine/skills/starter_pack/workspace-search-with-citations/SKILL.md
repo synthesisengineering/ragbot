@@ -111,7 +111,7 @@ When a hit is ambiguous, the model says so. When a hit is on point, the model us
 Every factual claim that came from a hit is attributed inline. Use a compact format:
 
 ```
-The staging environment uses claude-sonnet-4.6 [deploy-config.yaml:142-167]. Production
+The staging environment uses claude-sonnet-5-5 [deploy-config.yaml:142-167]. Production
 runs the same model on the same revision [deploy-config.yaml:142-167; release-notes.md:88-95].
 ```
 

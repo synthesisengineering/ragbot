@@ -5,34 +5,39 @@ services:
   # Production deployments swap this out for the operator's preferred
   # backend (Honeycomb, Phoenix, Tempo, Datadog APM, etc.) by setting
   # OTEL_EXPORTER_OTLP_ENDPOINT on ragbot-api.
+  #
+  # Jaeger v2 (built on the OpenTelemetry Collector). v1's all-in-one image
+  # stopped at 1.76.0 when v1 reached end of life; v2 receives OTLP on 4317
+  # (gRPC) and 4318 (HTTP) by default, so no receiver flags are needed.
   jaeger:
-    image: jaegertracing/all-in-one:1.76.0
+    image: jaegertracing/jaeger:2.23.0
     container_name: ragbot-jaeger
     ports:
       - "127.0.0.1:16686:16686"   # Jaeger UI
       - "127.0.0.1:4317:4317"     # OTLP gRPC receiver
       - "127.0.0.1:4318:4318"     # OTLP HTTP receiver
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
     restart: unless-stopped
     networks:
       - ragbot-network
 
+  # PostgreSQL 18 with pgvector. The postgres 18 images keep the data
+  # directory under /var/lib/postgresql/18/docker and expect the volume at
+  # /var/lib/postgresql, so a major upgrade (pg_upgrade --link) can later run
+  # inside one volume. A pg16 data directory cannot be opened by pg18, so this
+  # uses a new volume; scripts/migrate-postgres-16-to-18.sh copies an existing
+  # pg16 database into it and leaves the old volume untouched.
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg18
     container_name: ragbot-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ragbot}
       POSTGRES_USER: ${POSTGRES_USER:-ragbot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragbot_dev_password_change_me}
-      # Listen on all interfaces inside the container; the network firewall
-      # is the docker-compose network boundary.
-      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       # Expose to host for ragbot CLI running natively. Bind to 127.0.0.1 only.
       - "127.0.0.1:5433:5432"
     volumes:
-      - ragbot-postgres-data:/var/lib/postgresql/data
+      - ragbot-postgres-18-data:/var/lib/postgresql
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ragbot} -d ${POSTGRES_DB:-ragbot}"]
@@ -95,8 +100,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-ragbot-api}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
-      # Disable OTLP metric export by default. Jaeger only accepts traces
-      # over OTLP; sending metrics there prints UNIMPLEMENTED errors on
+      # Disable OTLP metric export by default. Jaeger only stores traces;
+      # sending metrics there prints UNIMPLEMENTED errors on
       # every export interval. Prometheus exposition at /api/metrics works
       # regardless. Operators with a real OTLP-metrics-accepting collector
       # (Prometheus OTLP receiver, Phoenix, Datadog OTLP) override this to
@@ -165,7 +170,7 @@ services:
 volumes:
   ragbot-sessions:
     driver: local
-  ragbot-postgres-data:
+  ragbot-postgres-18-data:
     driver: local
   ragbot-web-node-modules:
     driver: local

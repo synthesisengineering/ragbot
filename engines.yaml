@@ -1,7 +1,9 @@
 # engines.yaml — LLM engine configuration for Ragbot.
 #
-# Updated: September 25, 2026; new entries verified against provider documentation.
-# Earlier catalog entries and explicit defaults remain selectable unchanged.
+# Updated: November 6, 2026. Every provider carries only its current models;
+# superseded releases were removed rather than kept selectable. Identifiers,
+# limits and request contracts were verified against provider documentation
+# that day — see docs/model-catalog-2026-11-06.yaml for sources.
 # First matching tier is the ordered role preference, not a user-model override.
 #
 # Field reference:
@@ -13,32 +15,31 @@
 #                        ordered-preference table). tests/test_engines_yaml.py enforces
 #                        that the two files agree; edit both together.
 #   is_flagship        — the provider's showcase model (drives default thinking effort).
-#                        Distinct from tier: Opus 4.8 is judgment-tier but not flagship,
+#                        Distinct from tier: Opus 5.5 is judgment-tier but not flagship,
 #                        and the ollama catalog carries several flagships.
-#   max_input_tokens   — context window
+#   max_input_tokens   — the documented input limit (for OpenAI, below the context window)
 #   max_output_tokens  — maximum tokens the model can generate in response
-#   default_max_tokens — recommended request default (typically ~80% of max_output_tokens)
-#   thinking           — adaptive/extended thinking metadata (informational; chat code may
-#                        opt into it via LiteLLM `thinking` parameter)
+#   default_max_tokens — request default (product policy)
+#   thinking           — reasoning metadata. `strict: true` entries are validated
+#                        contracts: requests must use one of `modes`, and the
+#                        `request_parameters` block says how the provider takes it.
 #
-# Sources (July 14, 2026):
-#   Anthropic:  https://platform.claude.com/docs/en/docs/about-claude/models/overview
-#   OpenAI:     https://developers.openai.com/api/docs/models
-#   Google:     https://ai.google.dev/gemini-api/docs/changelog (as of April 24, 2026)
-
 engines:
   - name: openai
     api_key_name: OPENAI_API_KEY
     models:
-      # Verified capability sources: docs/model-catalog-2026-09-25.yaml.
-      # Request limit 8192 and UI temperature cap 1 are product policy; null omits sampling.
+      # Verified capability sources: docs/model-catalog-2026-11-06.yaml.
+      # max_input_tokens is the documented input limit (922K), not the 1.05M
+      # context window. Request limit 8192 and UI temperature cap 1 are product
+      # policy; null omits sampling.
       - name: gpt-6-astra
         display_name: GPT-6 Astra
         tier: judgment
+        is_flagship: true
         supports_system_role: true
         max_temperature: 1
         temperature: null
-        max_input_tokens: 1050000
+        max_input_tokens: 922000
         max_output_tokens: 128000
         default_max_tokens: 8192
         thinking:
@@ -55,13 +56,36 @@ engines:
           token_limit: max_completion_tokens
           sampling: non_reasoning_only
           tool_calling: responses_only
-      - name: gpt-6-sol
-        display_name: GPT-6 Sol
+      - name: gpt-6.1-sol
+        display_name: GPT-6.1 Sol
         tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: null
-        max_input_tokens: 1050000
+        max_input_tokens: 922000
+        max_output_tokens: 128000
+        default_max_tokens: 8192
+        thinking:
+          supported: true
+          strict: true
+          modes:
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+          default: medium
+        request_parameters:
+          token_limit: max_completion_tokens
+          sampling: non_reasoning_only
+          tool_calling: responses_only
+      - name: gpt-6.1-terra
+        display_name: GPT-6.1 Terra
+        tier: routine
+        supports_system_role: true
+        max_temperature: 1
+        temperature: null
+        max_input_tokens: 922000
         max_output_tokens: 128000
         default_max_tokens: 8192
         thinking:
@@ -78,14 +102,14 @@ engines:
         request_parameters:
           token_limit: max_completion_tokens
           sampling: non_reasoning_only
-          tool_calling: non_reasoning_only
+          tool_calling: responses_only
       - name: gpt-6-luna
         display_name: GPT-6 Luna
         tier: bulk
         supports_system_role: true
         max_temperature: 1
         temperature: null
-        max_input_tokens: 1050000
+        max_input_tokens: 922000
         max_output_tokens: 128000
         default_max_tokens: 8192
         thinking:
@@ -103,60 +127,19 @@ engines:
           token_limit: max_completion_tokens
           sampling: non_reasoning_only
           tool_calling: non_reasoning_only
-      # GPT-5.6 Luna — cost-optimized, high-volume tier
-      # Pricing: $1/$6 per MTok. 1.05M context, 128K output.
-      # (No thinking block, matching the small-tier convention; verify reasoning
-      #  support against the API before enabling.)
-      - name: gpt-5.6-luna
-        display_name: GPT-5.6 Luna
-        tier: bulk
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 1.0
-        max_input_tokens: 1050000
-        max_output_tokens: 128000
-        default_max_tokens: 8192
-      # GPT-5.6 Terra — balanced intelligence and cost
-      # Pricing: $2.50/$15 per MTok. 1.05M context, 128K output.
-      # Reasoning modes carried forward from the GPT-5.x line convention.
-      - name: gpt-5.6-terra
-        display_name: GPT-5.6 Terra
-        tier: routine
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 1.0
-        max_input_tokens: 1050000
-        max_output_tokens: 128000
-        default_max_tokens: 8192
-        thinking:
-          supported: true
-          modes: [minimal, low, medium, high]
-      # GPT-5.6 Sol — frontier model for complex professional work
-      # Pricing: $5/$30 per MTok. 1.05M context, 128K output.
-      # Reasoning modes carried forward from the GPT-5.x line convention.
-      - name: gpt-5.6-sol
-        display_name: GPT-5.6 Sol
-        tier: judgment
-        is_flagship: true
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 1.0
-        max_input_tokens: 1050000
-        max_output_tokens: 128000
-        default_max_tokens: 8192
-        thinking:
-          supported: true
-          modes: [minimal, low, medium, high]
-    default_model: gpt-5.6-terra
+    default_model: gpt-6.1-sol
 
   - name: anthropic
     api_key_name: ANTHROPIC_API_KEY
     models:
-      # Verified capability sources: docs/model-catalog-2026-09-25.yaml.
-      # Request limit 8192 and UI temperature cap 1 are product policy; null omits sampling.
+      # Verified capability sources: docs/model-catalog-2026-11-06.yaml.
+      # Every model takes effort through output_config with adaptive thinking;
+      # API version 2026-10-21 removes temperature, top_p and top_k for all of
+      # them. always_on marks models that reject disabled thinking.
       - name: claude-fable-5-1
         display_name: Claude Fable 5.1
         tier: judgment
+        is_flagship: true
         supports_system_role: true
         max_temperature: 1
         temperature: null
@@ -202,77 +185,83 @@ engines:
         request_parameters:
           effort: output_config
           sampling: unsupported
-      # Claude Haiku 4.5 — fastest model with near-frontier intelligence
-      # Released October 1, 2025. Pricing: $1/$5 per MTok. 200k context, 64k output.
-      # Supports extended thinking (per July 2026 docs), not adaptive.
-      - name: claude-haiku-4-5-20251001
-        display_name: Claude Haiku 4.5
-        tier: bulk
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 200000
-        max_output_tokens: 64000
-        default_max_tokens: 8192
-        thinking:
-          supported: true
-          mode: extended
-      # Claude Sonnet 5 — the best combination of speed and intelligence
-      # Pricing: $3/$15 per MTok (introductory $2/$10 through Aug 31, 2026).
-      # 1M context, 128k output, adaptive thinking. `effort` defaults to high on the API.
-      - name: claude-sonnet-5
-        display_name: Claude Sonnet 5
+      - name: claude-sonnet-5-5
+        display_name: Claude Sonnet 5.5
         tier: routine
         supports_system_role: true
         max_temperature: 1
-        temperature: 0.75
+        temperature: null
         max_input_tokens: 1000000
         max_output_tokens: 128000
         default_max_tokens: 8192
         thinking:
           supported: true
-          mode: adaptive
-      # Claude Opus 4.8 — complex agentic coding and enterprise work
-      # Pricing: $5/$25 per MTok. 1M context, 128k output, adaptive thinking.
-      # `effort` defaults to high on all surfaces. Kept alongside Fable 5 as the
-      # cost-conscious judgment-tier fallback (see synthesis-model-tiers).
-      - name: claude-opus-4-8
-        display_name: Claude Opus 4.8
-        tier: judgment
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 1000000
-        max_output_tokens: 128000
-        default_max_tokens: 8192
-        thinking:
-          supported: true
-          mode: adaptive
-      # Claude Fable 5 — Anthropic's most capable widely released model
-      # (Mythos-class tier above Opus; GA June 9, 2026.) Pricing: $10/$50 per MTok.
-      # 1M context, 128k output. Adaptive thinking is ALWAYS ON (cannot be disabled),
-      # hence temperature 1.0 (thinking requires temp=1; backends normalize).
-      - name: claude-fable-5
-        display_name: Claude Fable 5
-        tier: judgment
-        is_flagship: true
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 1.0
-        max_input_tokens: 1000000
-        max_output_tokens: 128000
-        default_max_tokens: 8192
-        thinking:
-          supported: true
+          strict: true
+          modes:
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+          default: high
           mode: adaptive
           always_on: true
-    default_model: claude-sonnet-5
+        request_parameters:
+          effort: output_config
+          sampling: unsupported
+      - name: claude-haiku-5-5
+        display_name: Claude Haiku 5.5
+        tier: bulk
+        supports_system_role: true
+        max_temperature: 1
+        temperature: null
+        max_input_tokens: 1000000
+        max_output_tokens: 128000
+        default_max_tokens: 8192
+        thinking:
+          supported: true
+          strict: true
+          modes:
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+          default: medium
+          mode: adaptive
+          always_on: false
+        request_parameters:
+          effort: output_config
+          sampling: unsupported
+    default_model: claude-sonnet-5-5
 
   - name: google
     api_key_name: GOOGLE_API_KEY
     models:
-      # Verified capability sources: docs/model-catalog-2026-09-25.yaml.
-      # Request limit 8192 and UI temperature cap 1 are product policy; null omits sampling.
+      # Verified capability sources: docs/model-catalog-2026-11-06.yaml.
+      # Sampling parameters are deprecated or ignored on all three; thinking is
+      # set by level, never by budget.
+      - name: gemini/gemini-4-argon
+        display_name: Gemini 4 Argon
+        tier: judgment
+        is_flagship: true
+        supports_system_role: true
+        max_temperature: 1
+        temperature: null
+        max_input_tokens: 1048576
+        max_output_tokens: 65536
+        default_max_tokens: 8192
+        thinking:
+          supported: true
+          strict: true
+          modes:
+          - low
+          - medium
+          - high
+          default: medium
+        request_parameters:
+          effort: thinking_level
+          sampling: unsupported
       - name: gemini/gemini-3.8-flash
         display_name: Gemini 3.8 Flash
         tier: routine
@@ -292,6 +281,7 @@ engines:
           default: medium
         request_parameters:
           effort: thinking_level
+          sampling: unsupported
       - name: gemini/gemini-3.5-flash-lite
         display_name: Gemini 3.5 Flash Lite
         tier: bulk
@@ -312,49 +302,8 @@ engines:
           default: minimal
         request_parameters:
           effort: thinking_level
-      # Gemini 3.1 Flash Lite (preview) — most cost-effective, high-volume tier.
-      # 1M context, supports thinking levels (minimal/low/medium/high).
-      - name: gemini/gemini-3.1-flash-lite-preview
-        display_name: Gemini 3.1 Flash Lite
-        tier: bulk
-        supports_system_role: true
-        max_temperature: 2
-        temperature: 0.75
-        max_input_tokens: 1048576
-        max_output_tokens: 65536
-        default_max_tokens: 8192
-        thinking:
-          supported: true
-          modes: [minimal, low, medium, high]
-      # Gemini 3 Flash (preview) — balanced speed and capability.
-      - name: gemini/gemini-3-flash-preview
-        display_name: Gemini 3 Flash
-        tier: routine
-        supports_system_role: true
-        max_temperature: 2
-        temperature: 0.75
-        max_input_tokens: 1048576
-        max_output_tokens: 65536
-        default_max_tokens: 8192
-        thinking:
-          supported: true
-          modes: [minimal, low, medium, high]
-      # Gemini 3.1 Pro (preview) — flagship, complex reasoning.
-      # Released February 19, 2026. 1M context, multimodal.
-      - name: gemini/gemini-3.1-pro-preview
-        display_name: Gemini 3.1 Pro
-        tier: judgment
-        is_flagship: true
-        supports_system_role: true
-        max_temperature: 2
-        temperature: 0.75
-        max_input_tokens: 1048576
-        max_output_tokens: 65536
-        default_max_tokens: 8192
-        thinking:
-          supported: true
-          modes: [minimal, low, medium, high]
-    default_model: gemini/gemini-3-flash-preview
+          sampling: unsupported
+    default_model: gemini/gemini-3.8-flash
 
   - name: ollama
     # Local Ollama server (no API key required; uses MLX backend on Apple Silicon).
@@ -367,10 +316,13 @@ engines:
     # tiers) and expected MLX tokens/sec across Mac mini, MacBook Air,
     # MacBook Pro, and Mac Studio.
     models:
-      # Qwen3.6 35B-A3B — MoE flagship for local use (April 2026).
-      # 35B total / 3B active. Apache 2.0. Optimised for coding workloads.
-      - name: qwen3.6:35b-a3b
-        display_name: Qwen3.6 35B-A3B (MoE)
+      # Verified 2026-11-06 against the Ollama library tag pages and the model
+      # cards; sources in docs/model-catalog-2026-11-06.yaml. Only models with a
+      # local Ollama tag belong here: `:cloud` tags run on Ollama's servers, and
+      # routing treats this provider as local (synthesis_engine.config.is_local_model_id).
+      # Gemma 4 (2026-03-31) is the current Gemma generation.
+      - name: gemma4:31b
+        display_name: Gemma 4 31B
         tier: judgment
         is_flagship: true
         supports_system_role: true
@@ -382,197 +334,143 @@ engines:
         license: apache-2.0
         local_inference:
           mlx_supported: true
-          ollama_tag: qwen3.6:35b-a3b
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0]
+          ollama_tag: gemma4:31b
+        backend_notes:
+          ollama: "30.7B dense. 19-20GB at Q4; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+      # Qwen3.8 supersedes Qwen3.6; its card benchmarks against Qwen3.6-27B.
+      - name: qwen3.8:27b
+        display_name: Qwen3.8 27B
+        tier: routine
+        supports_system_role: true
+        max_temperature: 1
+        temperature: 0.75
+        max_input_tokens: 262144
+        max_output_tokens: 8192
+        default_max_tokens: 4096
+        license: apache-2.0
+        local_inference:
+          mlx_supported: true
+          ollama_tag: qwen3.8:27b
         thinking:
           supported: true
           mode: hybrid
           modes: [thinking, instruct]
         backend_notes:
-          mlx: "qwen3.6:35b-a3b-mlx-bf16 ships native. 3B active params mean fast decode (~60 tok/s on M5 Max Q4); weights still need ~22GB Q4 / ~70GB BF16"
-      # Gemma 4 E4B — small/fast tier. Effective 4B params (Matformer).
-      - name: gemma4:e4b
-        display_name: Gemma 4 E4B
-        tier: bulk
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 128000
-        max_output_tokens: 8192
-        default_max_tokens: 4096
-        license: gemma
-        local_inference:
-          mlx_supported: true
-          ollama_tag: gemma4:e4b
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0, FP16]
-        backend_notes:
-          mlx: "Native MLX preview path via Ollama 0.19+; ~140 tok/s on M5 Max, ~95 tok/s on M4 Pro"
-      # Gemma 4 26B MoE — medium tier. ~3.8B active params per token; high throughput.
+          ollama: "27B dense with vision (2026-08). 18GB at Q4; 56GB as -mlx-bf16; -nvfp4, -mxfp8 and -q8_0 variants. Thinking on by default."
       - name: gemma4:26b
         display_name: Gemma 4 26B MoE
         tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
-        max_input_tokens: 128000
+        max_input_tokens: 262144
         max_output_tokens: 8192
         default_max_tokens: 4096
-        license: gemma
+        license: apache-2.0
         local_inference:
           mlx_supported: true
           ollama_tag: gemma4:26b
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0]
         backend_notes:
-          mlx: "MLX backend ~75 tok/s on M5 Max Q4; MoE routing benefits from MLX over llama.cpp by 20-30%"
-      # Gemma 4 31B Dense — large tier. Maximum quality.
-      - name: gemma4:31b
-        display_name: Gemma 4 31B
+          ollama: "25.2B total / 3.8B active MoE. 16-19GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+      - name: gemma4:12b
+        display_name: Gemma 4 12B
+        tier: bulk
+        supports_system_role: true
+        max_temperature: 1
+        temperature: 0.75
+        max_input_tokens: 262144
+        max_output_tokens: 8192
+        default_max_tokens: 4096
+        license: apache-2.0
+        local_inference:
+          mlx_supported: true
+          ollama_tag: gemma4:12b
+        backend_notes:
+          ollama: "11.95B dense (Gemma 4 12B Unified, 2026-06-03). 7.7-8.0GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+      - name: gemma4:e4b
+        display_name: Gemma 4 E4B
+        tier: bulk
+        supports_system_role: true
+        max_temperature: 1
+        temperature: 0.75
+        max_input_tokens: 131072
+        max_output_tokens: 8192
+        default_max_tokens: 4096
+        license: apache-2.0
+        local_inference:
+          mlx_supported: true
+          ollama_tag: gemma4:e4b
+        backend_notes:
+          ollama: "4.5B effective (8B with embeddings). 6.6-9.5GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+      - name: qwen3.8-flash-next:125b-a6b-q4_K_M
+        display_name: Qwen3.8 Flash-Next 125B-A6B (preview)
         tier: judgment
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
-        max_input_tokens: 128000
+        max_input_tokens: 262144
         max_output_tokens: 8192
         default_max_tokens: 4096
-        license: gemma
+        license: qwen-community-1.0
         local_inference:
           mlx_supported: true
-          ollama_tag: gemma4:31b
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0]
+          ollama_tag: qwen3.8-flash-next:125b-a6b-q4_K_M
+        thinking:
+          supported: true
+          mode: hybrid
+          modes: [thinking, instruct]
         backend_notes:
-          mlx: "MLX backend ~22 tok/s on M5 Max Q4; dense 31B needs 96GB unified memory at Q8, ~20GB at Q4"
-      # Llama 4 Scout — 17B active / 109B total MoE (16 experts).
-      # Released April 2025. 10M context (Instruct), natively multimodal.
-      # All expert weights must fit in unified memory even though only
-      # 17B are active per token. Best fit: M5 Max 128GB and up.
-      - name: llama4:scout
-        display_name: Llama 4 Scout (17B-16E)
+          ollama: "125B total / 6B active MoE, a preview of the Qwen4 architecture (2026-08). 120GB at Q4; 105GB as 125b-mlx or 125b-a6b-nvfp4. Needs a large-memory machine."
+      # Meta's open-weight successor to Llama 4.
+      - name: muse-glimmer:30b
+        display_name: Muse Glimmer 30B
         tier: routine
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
-        max_input_tokens: 10485760
+        max_input_tokens: 131072
         max_output_tokens: 8192
         default_max_tokens: 4096
-        license: llama-4-community
+        license: apache-2.0
         local_inference:
           mlx_supported: true
-          ollama_tag: llama4:scout
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0]
+          ollama_tag: muse-glimmer:30b
         backend_notes:
-          mlx: "MLX is 20-40% faster than llama.cpp on Scout (M3 Ultra / M4 Max / M5 Max). Plan ~58GB at Q4, ~109GB at Q8"
-      # Llama 4 Maverick — 17B active / 400B total MoE (128 experts).
-      # Released April 2025. 1M context. Mac Studio territory only.
-      - name: llama4:maverick
-        display_name: Llama 4 Maverick (17B-128E)
+          ollama: "29.6B dense including a ~1.8B vision encoder (Meta, 2026-08). 18GB at Q4; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants. Reasoning strength is set in the system prompt."
+      - name: nemotron-3.5-super:120b-a12b
+        display_name: Nemotron 3.5 Super 120B-A12B
         tier: judgment
-        is_flagship: true
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
         max_input_tokens: 1048576
         max_output_tokens: 8192
         default_max_tokens: 4096
-        license: llama-4-community
+        license: openmdw-1.1
         local_inference:
           mlx_supported: true
-          ollama_tag: llama4:maverick
-          llama_cpp_quants: [Q4_K_M, Q5_K_M]
+          ollama_tag: nemotron-3.5-super:120b-a12b
+        thinking:
+          supported: true
+          mode: hybrid
+          modes: [thinking, instruct]
         backend_notes:
-          mlx: "Requires ~220GB at Q4, ~400GB at Q8; Mac Studio M3 Ultra 192GB runs Q4 tight, 256GB+ comfortable"
-      # Qwen3.6 27B Dense — medium tier (released April 2026).
-      # Apache 2.0. Successor to the Qwen3.5 line; MLX-native tags ship.
-      - name: qwen3.6:27b
-        display_name: Qwen3.6 27B
-        tier: routine
+          ollama: "120B total / 12B active hybrid Mamba-2/Transformer MoE with vision (NVIDIA, 2026-10). 90GB at Q4; 80GB as MLX nvfp4."
+      - name: mistral-medium-3.5:128b
+        display_name: Mistral Medium 3.5 128B
+        tier: judgment
         supports_system_role: true
         max_temperature: 1
         temperature: 0.75
         max_input_tokens: 262144
         max_output_tokens: 8192
         default_max_tokens: 4096
-        license: apache-2.0
+        license: modified-mit
         local_inference:
-          mlx_supported: true
-          ollama_tag: qwen3.6:27b
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0, MXFP8]
+          mlx_supported: false
+          ollama_tag: mistral-medium-3.5:128b
         backend_notes:
-          mlx: "qwen3.6:27b-mlx-bf16 ships native; ~17GB at Q4, ~31GB at MXFP8, ~55GB at BF16"
-      # DeepSeek V3.2-Exp — 671B total / 37B active MoE (December 2024 line, V3.2 in October 2025).
-      # 128K context. Sparse Attention for long-context efficiency.
-      # Mac Studio territory — Q4 is ~280GB; Q3 / Q2 viable on 192GB.
-      - name: deepseek-v3.2:671b
-        display_name: DeepSeek V3.2 (MoE, 671B-A37B)
-        tier: judgment
-        is_flagship: true
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 131072
-        max_output_tokens: 65536
-        default_max_tokens: 8192
-        license: deepseek-model-license
-        local_inference:
-          mlx_supported: true
-          ollama_tag: deepseek-v3.2:671b
-          llama_cpp_quants: [Q2_K, Q3_K_M, Q4_K_M]
-        backend_notes:
-          mlx: "DeepSeek-V3.2-mlx-5bit ships; ~40 tok/s on M3 Max 128GB / M4 Ultra at int4. 512GB M3 Ultra runs 4-bit at >20 tok/s with full headroom"
-      # Mistral Large 3 — 41B active / 675B total sparse MoE.
-      # Released December 2025. 256K context. Apache 2.0 weights via mistralai/.
-      - name: mistral-large-3:675b
-        display_name: Mistral Large 3 (MoE, 675B-A41B)
-        tier: judgment
-        is_flagship: true
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 262144
-        max_output_tokens: 32768
-        default_max_tokens: 8192
-        license: apache-2.0
-        local_inference:
-          mlx_supported: true
-          ollama_tag: mistral-large-3:latest
-          llama_cpp_quants: [Q2_K, Q3_K_M, Q4_K_M, Q5_K_M]
-        backend_notes:
-          mlx: "Q4 footprint ~340GB; Mac Studio 256GB runs Q3_K_M comfortably (~270GB). 41B active params mean ~15-22 tok/s on M3 Ultra 512GB"
-      # Mistral Medium 3.5 — dense 128B, 256K context (2026).
-      # The most-capable Mistral model that fits on a single MacBook Pro.
-      - name: mistral-medium-3.5:128b
-        display_name: Mistral Medium 3.5 (128B Dense)
-        tier: judgment
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 262144
-        max_output_tokens: 32768
-        default_max_tokens: 8192
-        license: mistral-research
-        local_inference:
-          mlx_supported: true
-          ollama_tag: mistral-medium-3.5:latest
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0]
-        backend_notes:
-          mlx: "Dense 128B; ~70GB at Q4, ~138GB at Q8. M5 Max 128GB Q4 fits with light headroom; Mac Studio 192GB Q8 comfortable"
-      # Mistral Small 4 — 119B total / 6B active MoE (March 2026).
-      # Apache 2.0. Small active footprint but full weights matter for fit.
-      - name: mistral-small-4:119b
-        display_name: Mistral Small 4 (MoE, 119B-A6B)
-        tier: routine
-        supports_system_role: true
-        max_temperature: 1
-        temperature: 0.75
-        max_input_tokens: 262144
-        max_output_tokens: 16384
-        default_max_tokens: 8192
-        license: apache-2.0
-        local_inference:
-          mlx_supported: true
-          ollama_tag: mistral-small-4:latest
-          llama_cpp_quants: [Q4_K_M, Q5_K_M, Q8_0]
-        backend_notes:
-          mlx: "6B active params mean very fast decode (~80 tok/s M5 Max Q4); 119B total weights need ~64GB Q4 / ~126GB Q8"
+          ollama: "128B dense with vision. 80GB at Q4, 138GB at Q8; no MLX tags."
     default_model: gemma4:31b
 
 default: anthropic

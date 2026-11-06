@@ -294,7 +294,12 @@ class MemoryConsolidator:
     in-memory stub).
     """
 
-    DEFAULT_MODEL_ID = "anthropic/claude-haiku-4-5"
+    @property
+    def default_model_id(self) -> str:
+        """Model used when a caller names none: the default provider's bulk tier."""
+        from ..config import get_default_model_for_tier
+
+        return get_default_model_for_tier("bulk")
 
     def __init__(
         self,
@@ -338,7 +343,7 @@ class MemoryConsolidator:
         """
         run_at_dt = self._clock()
         run_at_iso = run_at_dt.isoformat()
-        effective_model = model_id or self.DEFAULT_MODEL_ID
+        effective_model = model_id or self.default_model_id
         session = self.memory.get_session(session_id)
         ws = workspace or (
             session.workspace if session is not None else self.default_workspace
@@ -481,7 +486,7 @@ class MemoryConsolidator:
         is supplied.
         """
         started = self._clock()
-        effective_model = model_id or self.DEFAULT_MODEL_ID
+        effective_model = model_id or self.default_model_id
         ws = workspace or self.default_workspace
 
         if session_ids is None:
@@ -537,7 +542,7 @@ class MemoryConsolidator:
         consolidated with the same model id (idempotency).
         """
         started = self._clock()
-        effective_model = model_id or self.DEFAULT_MODEL_ID
+        effective_model = model_id or self.default_model_id
         ws = workspace or self.default_workspace
         cutoff = started - timedelta(hours=max(idle_threshold_hours, 0.0))
 

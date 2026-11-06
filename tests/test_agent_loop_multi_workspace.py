@@ -188,7 +188,7 @@ def _trivial_plan_json(target: str = "summarise") -> str:
     )
 
 
-def _llm_plan_json(model_target: str = "openai/gpt-5.6-terra") -> str:
+def _llm_plan_json(model_target: str = "openai/gpt-6.1-terra") -> str:
     return json.dumps(
         {
             "steps": [
@@ -357,10 +357,10 @@ class TestGetRoutedLLMBackend:
         }
         backend = object()
         result_backend, model = get_routed_llm_backend(
-            policies, "anthropic/claude-opus-4-8", backend=backend,
+            policies, "anthropic/claude-opus-5-5", backend=backend,
         )
         assert result_backend is backend
-        assert model == "anthropic/claude-opus-4-8"
+        assert model == "anthropic/claude-opus-5-5"
 
     def test_deny_raises_model_denied_error(self):
         policies = {
@@ -372,25 +372,25 @@ class TestGetRoutedLLMBackend:
         }
         with pytest.raises(ModelDeniedError) as exc:
             get_routed_llm_backend(
-                policies, "openai/gpt-5.6-terra", backend=object(),
+                policies, "openai/gpt-6.1-terra", backend=object(),
             )
         assert exc.value.denying_workspace == "client-conf-ws"
-        assert "openai/gpt-5.6-terra" in exc.value.requested_model
+        assert "openai/gpt-6.1-terra" in exc.value.requested_model
 
     def test_downgrade_to_local_resolves_local_model(self):
         policies = {
             "client-conf-downgrade": self._policy(
                 Confidentiality.CLIENT_CONFIDENTIAL,
                 fallback=FallbackBehavior.DOWNGRADE_TO_LOCAL,
-                allowed=("anthropic/claude-*", "gemma/gemma-4-27b"),
+                allowed=("anthropic/claude-*", "ollama_chat/gemma4:31b"),
             ),
         }
         _, model = get_routed_llm_backend(
-            policies, "openai/gpt-5.6-terra", backend=object(),
+            policies, "openai/gpt-6.1-terra", backend=object(),
         )
         # Must resolve to a model the workspace allows; the allowlist
         # contains gemma so that's the natural pick.
-        assert model == "gemma/gemma-4-27b"
+        assert model == "ollama_chat/gemma4:31b"
 
     def test_warn_proceeds_with_requested_model(self, caplog):
         policies = {
@@ -402,12 +402,12 @@ class TestGetRoutedLLMBackend:
         }
         with caplog.at_level("WARNING"):
             _, model = get_routed_llm_backend(
-                policies, "openai/gpt-5.6-terra", backend=object(),
+                policies, "openai/gpt-6.1-terra", backend=object(),
             )
-        assert model == "openai/gpt-5.6-terra"
+        assert model == "openai/gpt-6.1-terra"
         # The denial reason was logged.
         assert any(
-            "openai/gpt-5.6-terra" in rec.getMessage() for rec in caplog.records
+            "openai/gpt-6.1-terra" in rec.getMessage() for rec in caplog.records
         )
 
     def test_strictest_denier_wins_over_first_denier(self):
@@ -427,7 +427,7 @@ class TestGetRoutedLLMBackend:
         }
         with pytest.raises(ModelDeniedError) as exc:
             get_routed_llm_backend(
-                policies, "openai/gpt-5.6-terra", backend=object(),
+                policies, "openai/gpt-6.1-terra", backend=object(),
             )
         assert exc.value.denying_workspace == "client-conf-ws"
 
@@ -490,7 +490,7 @@ class TestAgentLoopMultiWorkspace:
         # client-conf-ws's policy only allows anthropic/claude-* and its
         # fallback is DENY. The step fails; after MAX_REPLANS the loop
         # transitions to ERROR.
-        plan = _llm_plan_json("openai/gpt-5.6-terra")
+        plan = _llm_plan_json("openai/gpt-6.1-terra")
         loop = _build_loop(
             tmp_path=tmp_path,
             llm_backend=FakeLLMBackend(
@@ -522,7 +522,7 @@ class TestAgentLoopMultiWorkspace:
     async def test_client_confidential_downgrade_resolves_local(
         self, tmp_path, workspace_roots
     ):
-        plan = _llm_plan_json("openai/gpt-5.6-terra")
+        plan = _llm_plan_json("openai/gpt-6.1-terra")
         # The plan parses the planner response; the executed LLM_CALL
         # step then calls back into the same fake — provide a follow-up
         # response so the step's complete() succeeds.
@@ -548,13 +548,13 @@ class TestAgentLoopMultiWorkspace:
             if e.op_type == "model_call" and e.outcome == "downgraded"
         ]
         assert len(downgrades) == 1
-        assert downgrades[0].metadata["resolved_model"] != "openai/gpt-5.6-terra"
+        assert downgrades[0].metadata["resolved_model"] != "openai/gpt-6.1-terra"
 
     @pytest.mark.asyncio
     async def test_client_confidential_warn_proceeds(
         self, tmp_path, workspace_roots, caplog
     ):
-        plan = _llm_plan_json("openai/gpt-5.6-terra")
+        plan = _llm_plan_json("openai/gpt-6.1-terra")
         loop = _build_loop(
             tmp_path=tmp_path,
             llm_backend=FakeLLMBackend(
@@ -578,7 +578,7 @@ class TestAgentLoopMultiWorkspace:
             if e.op_type == "model_call" and e.outcome == "allowed"
         ]
         assert any(
-            e.metadata.get("resolved_model") == "openai/gpt-5.6-terra"
+            e.metadata.get("resolved_model") == "openai/gpt-6.1-terra"
             for e in allowed_model_calls
         )
 

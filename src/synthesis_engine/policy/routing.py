@@ -31,7 +31,8 @@ centralized ``my-projects.yaml``). When present, the file looks like:
       - "*-preview*"
 
     # local_only: when true, the workspace can ONLY route to local models
-    # (gemma/*, qwen3/*, llama-*, deepseek/*, or any id containing :local).
+    # (the Ollama models in engines.yaml, any ollama_chat/ or ollama/ id, or
+    # any id containing :local).
     # When local_only is true, allowed_models / denied_models are still
     # consulted as further restrictions.
     local_only: false
@@ -111,8 +112,9 @@ allowed_models:
 denied_models:
   - "*-preview*"
 
-# local_only: when true, only local models (gemma/*, qwen3/*, llama-*,
-# deepseek/*, or any id containing ':local') are permitted.
+# local_only: when true, only local models (the Ollama models in
+# engines.yaml, any ollama_chat/ or ollama/ id, or any id containing
+# ':local') are permitted.
 local_only: false
 
 # fallback_behavior: what to do when a disallowed model is requested.
@@ -223,34 +225,23 @@ class AllowanceCheck:
     suggested_fallback: Optional[str] = None
 
 
-# Local-model heuristic: matched against the bare model id.
-_LOCAL_MODEL_PATTERNS: Tuple[str, ...] = (
-    "gemma/*",
-    "qwen3/*",
-    "llama-*",
-    "deepseek/*",
-)
-
-
 def _is_local_model(model_id: str) -> bool:
-    """Heuristic: does this model_id refer to a locally-hosted model?
+    """Does ``model_id`` refer to a locally served model? See
+    :func:`synthesis_engine.config.is_local_model_id`."""
+    from ..config import is_local_model_id
 
-    Two signals:
-      * The ``:local`` suffix (operator-controlled tag).
-      * One of the curated provider/family globs in
-        :data:`_LOCAL_MODEL_PATTERNS`.
+    return is_local_model_id(model_id)
+
+
+def _suggest_local_fallback() -> Optional[str]:
+    """The default local model from engines.yaml, for downgrade messaging.
+
+    ``None`` when engines.yaml configures no local model.
     """
-    if ":local" in model_id:
-        return True
-    for pattern in _LOCAL_MODEL_PATTERNS:
-        if fnmatch.fnmatchcase(model_id, pattern):
-            return True
-    return False
+    from ..config import get_local_model_ids
 
-
-def _suggest_local_fallback() -> str:
-    """Suggest a sensible local-model id for downgrade messaging."""
-    return "gemma/gemma-3-27b:local"
+    local = get_local_model_ids()
+    return local[0] if local else None
 
 
 def is_model_allowed(policy: RoutingPolicy, model_id: str) -> AllowanceCheck:

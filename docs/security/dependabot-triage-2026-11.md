@@ -306,3 +306,67 @@ cover task polling and paging over real JSON-RPC, proxy pass-through, tool-call
 validation and error results, unknown-resource errors, fail-closed bearer
 resolution, and a Streamable HTTP round trip through Uvicorn that checks a 401
 without a token and `allowed_tools` enforcement with one.
+
+## Full upgrade to the latest releases
+
+After the queue was clear, every external dependency moved to its latest
+stable release, at the owner's direction: no backward compatibility, and no
+dependency tied to an old version.
+
+### Runtimes and images
+
+| Component | Before | After | Note |
+| --- | --- | --- | --- |
+| Python (CI, backend image) | 3.12 | 3.14 | 3.15 (released 2026-10-09) lacks Linux wheels for PyYAML 6.0.3, fastuuid and orjson; 3.14 has wheels for all 175 packages on amd64 and arm64 |
+| Backend image compiler | `gcc` installed | none | every dependency installs from a wheel |
+| Node (CI, web image) | 22 | 26 | 26 became the active LTS on 2026-10-28 and bundles npm 11, so the image no longer installs npm separately |
+| PostgreSQL | pgvector `pg16` | pgvector `pg18` (pgvector 0.8.7) | new volume at `/var/lib/postgresql`; `scripts/migrate-postgres-16-to-18.sh` copies an existing database |
+| Jaeger | `all-in-one:1.76.0` (v1, end of life) | `jaegertracing/jaeger:2.23.0` | v2 receives OTLP on 4317/4318 by default |
+| GitHub Actions | checkout, setup-python, setup-node v7 | unchanged | already the latest majors |
+
+### Python packages
+
+- Every direct requirement's floor is now the latest release, resolved on
+  Python 3.14. Raising the floors moved nothing: `pip freeze` was identical
+  before and after.
+- `google-generativeai` was removed. It is end of life, nothing imported it,
+  and no other dependency required it. Its pin on
+  `google-ai-generativelanguage==0.6.15` had held protobuf at 5.29.6; protobuf
+  is now 7.36.2, and google-api-core, proto-plus and grpcio-status are current.
+- `appdirs`, unreleased since 2020, was replaced by its successor
+  `platformdirs`, which has the same `user_data_dir` call and returns the same
+  paths.
+
+### Held back upstream
+
+Seven packages still install below their latest release. In every case the cap
+sits in the latest release of the package that depends on them, so nothing in
+Ragbot can lift it:
+
+| Package | Installed | Latest | Capped by |
+| --- | --- | --- | --- |
+| filelock | 3.32.7 | 4.2.9 | litellm 1.108.1 (`<4.0`); 13 CVEs, see above |
+| huggingface-hub | 1.33.0 | 2.4.0 | litellm 1.108.1 (`<2.0`) |
+| importlib-metadata | 8.9.0 | 10.1.0 | litellm 1.108.1 (`<9.0`) |
+| mpmath | 1.3.0 | 1.4.1 | sympy 1.14.0 (`<1.4`) |
+| python-dateutil | 2.9.0.post0 | 4.0.0 | botocore 1.43.125 (`<3.0.0`) |
+| tenacity | 9.1.4 | 9.2.1 | google-genai 3.0.0 (`<9.2.0`) |
+| uuid-utils | 0.19.0 | 1.2.0 | langsmith 0.14.17 (`<1.0`) |
+
+LiteLLM holds three of the seven. Its 1.109.0rc1 pre-release already lifts the
+filelock cap.
+
+### Web packages
+
+Every package is on its latest release, with manifest floors raised to match,
+including jsdom 31. The one exception is TypeScript, which stays on 6.0.3:
+typescript-eslint 8.72.1, and its canary build, still declare
+`typescript <6.1.0`. `npm audit` reports 0 vulnerabilities.
+
+### Code and test fixes found on the new runtimes
+
+- `synthesis_engine/agent/sandbox.py` used `asyncio.get_event_loop()` inside a
+  coroutine; it now uses `asyncio.get_running_loop()`.
+- Two class-scoped fixtures in `tests/test_engines_yaml.py` were instance
+  methods, which pytest 9 deprecates and pytest 10 removes; they are now
+  classmethods.

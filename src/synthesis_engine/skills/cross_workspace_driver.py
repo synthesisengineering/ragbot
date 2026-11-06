@@ -443,7 +443,7 @@ async def run_cross_workspace_synthesis(
     memory: Memory,
     routing_policies: Dict[str, RoutingPolicy],
     total_budget_tokens: int = 8000,
-    model_id: str = "anthropic/claude-opus-4-7",
+    model_id: Optional[str] = None,
     retriever: _MemoryRetriever = _DEFAULT_RETRIEVER,
     audit_writer: Any = None,
 ) -> SynthesisReport:
@@ -480,6 +480,7 @@ async def run_cross_workspace_synthesis(
         total_budget_tokens: Aggregate token budget for retrieval.
         model_id: Model id to pass to the LLM backend AND to the audit
             entry. The audit trail surfaces this value for the operator.
+            Defaults to the default provider's judgment-tier model.
         retriever: Override for the retrieval function. Defaults to
             :func:`three_tier_retrieve_multi`. Tests pass a fake.
         audit_writer: Override for the audit-log writer. Defaults to
@@ -497,6 +498,11 @@ async def run_cross_workspace_synthesis(
             entries. The audit entry is NOT written in this case — the
             op did not pass the input validation.
     """
+
+    if model_id is None:
+        from ..config import get_default_model_for_tier
+
+        model_id = get_default_model_for_tier("judgment")
 
     # Step 1 — normalise inputs.
     deduped: List[str] = []

@@ -10,7 +10,7 @@ This guide gets a working stack up on a single machine. For the configuration th
 - **Git**, for cloning the repository.
 - **At least one API key** for a hosted LLM provider (Anthropic, OpenAI, or Google), or a running [Ollama](https://ollama.com) on the host for local models. The Ollama path needs no API key.
 
-A Python toolchain is **not** required for the default install. If you intend to run the CLI directly on the host instead of inside the container, install **Python 3.12 or newer** from [python.org](https://www.python.org/downloads/) and use the project's `requirements.txt`.
+A Python toolchain is **not** required for the default install. If you intend to run the CLI directly on the host instead of inside the container, install **Python 3.14 or newer** from [python.org](https://www.python.org/downloads/) and use the project's `requirements.txt`.
 
 ## Install via Docker (default)
 
@@ -63,7 +63,7 @@ docker compose exec ragbot ragbot skills list
 docker compose exec ragbot ragbot db status
 ```
 
-To install the CLI on the host instead (requires Python 3.12+):
+To install the CLI on the host instead (requires Python 3.14+):
 
 ```bash
 python3 -m venv .venv

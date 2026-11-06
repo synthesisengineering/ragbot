@@ -6,19 +6,19 @@ import sys
 import argparse
 import re
 import json
-import appdirs
+import platformdirs
 import openai
 import anthropic
 import litellm
 from helpers import load_files, load_config, print_saved_files, chat, load_workspaces_as_profiles
 from synthesis_engine.config import normalize_model_id
 from synthesis_engine.keystore import get_api_key
-from synthesis_engine.workspaces import get_llm_specific_instruction_path, ENGINE_TO_INSTRUCTION_FILE
+from synthesis_engine.workspaces import get_llm_specific_instruction_path
 
 appname = "ragbot"
 appauthor = "Rajiv Pant"
 
-data_dir = appdirs.user_data_dir(appname, appauthor)
+data_dir = platformdirs.user_data_dir(appname, appauthor)
 sessions_data_dir = os.path.join(data_dir, "sessions")
 
 # Load configuration from engines.yaml
@@ -556,7 +556,7 @@ def run_agent_replay(args):
     """
     import asyncio
 
-    from synthesis_engine.agent import AgentLoop, GraphState
+    from synthesis_engine.agent import AgentLoop
     from synthesis_engine.llm import get_llm_backend
 
     store = _agent_checkpoint_store()
@@ -844,8 +844,6 @@ def run_chat(args):
         print_saved_files(data_dir)
         return
 
-    new_session = True if not args.load else False
-
     # Workspace discovery for the chat command:
     #   - Honour RAGBOT_DATA_ROOT (legacy flat-parent override) when set.
     #   - Honour RAGBOT_BASE_PATH (the canonical override used elsewhere).
@@ -854,7 +852,6 @@ def run_chat(args):
     data_root = os.getenv('RAGBOT_DATA_ROOT') or os.getenv('RAGBOT_BASE_PATH')
     profiles = load_workspaces_as_profiles(data_root)
 
-    workspace_name = None
     workspace_dir_name = None
 
     if args.profile:
@@ -864,7 +861,6 @@ def run_chat(args):
             print(f"Error: Workspace '{args.profile}' not found.")
             print(f"Available workspaces: {', '.join(available_workspaces)}")
             sys.exit(1)
-        workspace_name = args.profile
         workspace_dir_name = selected_profile_data.get('dir_name', args.profile)
 
     # Handle custom instructions
@@ -890,7 +886,6 @@ def run_chat(args):
     if auto_load_instructions and workspace_dir_name:
         llm_instruction_file = get_llm_specific_instruction_path(workspace_dir_name, args.engine)
         if llm_instruction_file:
-            llm_name = ENGINE_TO_INSTRUCTION_FILE.get(args.engine, 'claude.md').replace('.md', '')
             print(f"LLM-specific instructions will be auto-loaded for {args.engine} engine")
             print(f" - {llm_instruction_file}")
         else:
@@ -1184,7 +1179,7 @@ def run_skills_info(args):
     skill = next((s for s in skills if s.name == target), None)
     if skill is None:
         print(f"Skill not found: {target}", file=sys.stderr)
-        print(f"Run `ragbot skills list` to see all discovered skills.", file=sys.stderr)
+        print("Run `ragbot skills list` to see all discovered skills.", file=sys.stderr)
         return 1
 
     print(f"Name:        {skill.name}")
@@ -1798,7 +1793,7 @@ def run_compile(args):
         personal_repo = get_personal_repo_path_local(args.base_path)
 
         if not personal_repo or not os.path.exists(personal_repo):
-            print(f"Error: Personal repo not found. Set default_workspace in ~/.synthesis/ragbot.yaml", file=sys.stderr)
+            print("Error: Personal repo not found. Set default_workspace in ~/.synthesis/ragbot.yaml", file=sys.stderr)
             return 1
 
         if not args.quiet:
@@ -1833,7 +1828,7 @@ def run_compile(args):
                 print(f"  - {error}", file=sys.stderr)
 
         print(f"\n{'='*70}")
-        print(f"COMPILATION COMPLETE")
+        print("COMPILATION COMPLETE")
         print(f"{'='*70}")
         print(f"Projects compiled: {result['total_compiled']}")
         print(f"Output location: {personal_repo}/compiled/")

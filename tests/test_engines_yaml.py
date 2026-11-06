@@ -1,8 +1,8 @@
 """Schema tests for engines.yaml — Ragbot's single source of truth for LLM config.
 
-These tests assert the engines.yaml file parses cleanly and that the v3.4
-open-weights model additions (Llama 4, Qwen3.6, DeepSeek V3.2, Mistral 3
-family) are wired in with the schema fields the rest of Ragbot relies on.
+These tests assert the engines.yaml file parses cleanly and that the local
+open-weights lineup (verified 2026-11-06) is wired in with the schema fields
+the rest of Ragbot relies on.
 
 The schema-level assertions read engines.yaml directly via PyYAML so they
 remain valid even if the synthesis_engine loader is mid-refactor in a
@@ -27,38 +27,29 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 
-# Models added in the Ragbot v3.4 open-weights expansion. Each entry is
-# ``(model_name, provider, expected_tier, expected_min_context_window)``.
-# These are the load-bearing schema invariants — if any one of these
-# entries disappears from engines.yaml, a v3.4 release is incomplete.
-V3_4_LOCAL_MODELS: List[tuple] = [
-    ("llama4:scout", "ollama", "routine", 1_000_000),
-    ("llama4:maverick", "ollama", "judgment", 1_000_000),
-    ("qwen3.6:27b", "ollama", "routine", 200_000),
-    ("qwen3.6:35b-a3b", "ollama", "judgment", 200_000),
-    ("deepseek-v3.2:671b", "ollama", "judgment", 128_000),
-    ("mistral-large-3:675b", "ollama", "judgment", 200_000),
-    ("mistral-medium-3.5:128b", "ollama", "judgment", 200_000),
-    ("mistral-small-4:119b", "ollama", "routine", 200_000),
+# The local open-weights lineup, verified 2026-11-06 against the Ollama
+# library tag pages (sources: docs/model-catalog-2026-11-06.yaml). Each entry
+# is ``(model_name, provider, expected_tier, expected_min_context_window)``.
+# The ollama provider must carry exactly these models: superseded releases are
+# removed, not kept selectable.
+LOCAL_MODELS: List[tuple] = [
+    ("gemma4:31b", "ollama", "judgment", 262_144),
+    ("gemma4:26b", "ollama", "routine", 262_144),
+    ("gemma4:12b", "ollama", "bulk", 262_144),
+    ("gemma4:e4b", "ollama", "bulk", 131_072),
+    ("qwen3.8:27b", "ollama", "routine", 262_144),
+    ("qwen3.8-flash-next:125b-a6b-q4_K_M", "ollama", "judgment", 262_144),
+    ("muse-glimmer:30b", "ollama", "routine", 131_072),
+    ("nemotron-3.5-super:120b-a12b", "ollama", "judgment", 1_048_576),
+    ("mistral-medium-3.5:128b", "ollama", "judgment", 262_144),
 ]
 
 
-# Existing Gemma 4 entries that v3.4 augmented with MLX-backend metadata.
-# These should retain their original schema AND gain the new fields.
-V3_3_GEMMA_MODELS: List[str] = [
-    "gemma4:e4b",
-    "gemma4:26b",
-    "gemma4:31b",
-]
-
-
-# Required schema fields for every new local-inference entry. Missing any
-# of these breaks model picker rendering, LiteLLM routing, or the
-# sizing-matrix link.
+# Required schema fields for every local-inference entry. Missing any of
+# these breaks the model picker or Ollama routing.
 LOCAL_INFERENCE_REQUIRED_FIELDS = {
     "mlx_supported",
     "ollama_tag",
-    "llama_cpp_quants",
 }
 
 
@@ -154,14 +145,14 @@ class TestEnginesYamlStructure:
         assert config["default"] in engine_names
 
 
-class TestV34LocalModelEntries:
-    """Each v3.4-added open-weights model is present with the required schema."""
+class TestLocalModelEntries:
+    """Each current local model is present with the required schema."""
 
     @pytest.mark.parametrize(
         "model_name,provider,expected_tier,expected_min_context",
-        V3_4_LOCAL_MODELS,
+        LOCAL_MODELS,
     )
-    def test_v34_model_present(
+    def test_local_model_present(
         self,
         model_name: str,
         provider: str,
@@ -187,60 +178,56 @@ class TestV34LocalModelEntries:
             f"expected {expected_min_context}"
         )
 
-    @pytest.mark.parametrize(
-        "model_name,provider,_,__",
-        V3_4_LOCAL_MODELS,
-    )
-    def test_v34_model_has_required_local_inference_block(
+    @pytest.mark.parametrize("model_name,provider,_,__", LOCAL_MODELS)
+    def test_local_model_has_required_local_inference_block(
         self, model_name: str, provider: str, _: str, __: int
     ):
-        """local_inference block is present with the required fields."""
+        """local_inference block is present, and its tag is the model name."""
         config = _load_yaml()
-        provider_block = _find_provider(config, provider)
-        model = _find_model(provider_block, model_name)
-
+        model = _find_model(_find_provider(config, provider), model_name)
         local_inf = model.get("local_inference")
-        assert local_inf is not None, (
-            f"{model_name}: missing local_inference block"
-        )
+        assert local_inf is not None, f"{model_name}: missing local_inference block"
         missing = LOCAL_INFERENCE_REQUIRED_FIELDS - set(local_inf.keys())
-        assert not missing, (
-            f"{model_name}: local_inference missing fields {missing}"
-        )
+        assert not missing, f"{model_name}: local_inference missing fields {missing}"
+        assert local_inf["ollama_tag"] == model_name
 
-    @pytest.mark.parametrize(
-        "model_name,provider,_,__",
-        V3_4_LOCAL_MODELS,
-    )
-    def test_v34_model_has_license(
+    @pytest.mark.parametrize("model_name,provider,_,__", LOCAL_MODELS)
+    def test_local_model_has_license(
         self, model_name: str, provider: str, _: str, __: int
     ):
         """Each local-inference model declares its license."""
         config = _load_yaml()
-        provider_block = _find_provider(config, provider)
-        model = _find_model(provider_block, model_name)
-        assert "license" in model, f"{model_name}: missing license"
-        assert isinstance(model["license"], str)
-        assert len(model["license"]) > 0
+        model = _find_model(_find_provider(config, provider), model_name)
+        assert isinstance(model.get("license"), str) and model["license"]
 
-    @pytest.mark.parametrize(
-        "model_name,provider,_,__",
-        V3_4_LOCAL_MODELS,
-    )
-    def test_v34_model_has_backend_notes_for_mlx(
+    @pytest.mark.parametrize("model_name,provider,_,__", LOCAL_MODELS)
+    def test_local_model_has_ollama_notes(
         self, model_name: str, provider: str, _: str, __: int
     ):
-        """Each local-inference model declares MLX backend notes."""
+        """Each local-inference model carries non-trivial Ollama notes (sizes, variants)."""
         config = _load_yaml()
-        provider_block = _find_provider(config, provider)
-        model = _find_model(provider_block, model_name)
-        notes = model.get("backend_notes")
-        assert notes is not None, f"{model_name}: missing backend_notes"
-        assert "mlx" in notes, f"{model_name}: backend_notes missing mlx entry"
-        assert isinstance(notes["mlx"], str)
-        assert len(notes["mlx"]) > 10  # non-trivial note
+        model = _find_model(_find_provider(config, provider), model_name)
+        notes = model.get("backend_notes") or {}
+        assert isinstance(notes.get("ollama"), str) and len(notes["ollama"]) > 10
 
-    def test_v34_thinking_mode_valid_when_present(self):
+    def test_ollama_provider_carries_exactly_the_current_lineup(self):
+        """Superseded local models are removed, and nothing unlisted slips in."""
+        config = _load_yaml()
+        ollama = _find_provider(config, "ollama")
+        assert {m["name"] for m in ollama["models"]} == {m[0] for m in LOCAL_MODELS}
+
+    def test_no_ollama_cloud_tags(self):
+        """Ollama `:cloud` tags run on Ollama's servers, never locally.
+
+        Routing treats the ollama provider as local, so a cloud tag here would
+        let a local_only workspace send data to a third-party service.
+        """
+        config = _load_yaml()
+        for model in _find_provider(config, "ollama")["models"]:
+            tag = model["name"].rsplit(":", 1)[-1]
+            assert tag != "cloud" and not tag.endswith("-cloud"), model["name"]
+
+    def test_thinking_mode_valid_when_present(self):
         """Where `thinking` is declared, its modes/mode use valid values."""
         config = _load_yaml()
         for engine in config["engines"]:
@@ -259,40 +246,6 @@ class TestV34LocalModelEntries:
                             f"{model['name']}: invalid thinking.modes entry "
                             f"{m!r}"
                         )
-
-
-class TestGemmaMlxAugmentations:
-    """v3.4 augmented existing Gemma 4 entries with MLX-backend metadata."""
-
-    @pytest.mark.parametrize("model_name", V3_3_GEMMA_MODELS)
-    def test_gemma_still_present(self, model_name: str):
-        """Existing Gemma entries are not removed."""
-        config = _load_yaml()
-        ollama = _find_provider(config, "ollama")
-        model = _find_model(ollama, model_name)
-        assert model is not None
-
-    @pytest.mark.parametrize("model_name", V3_3_GEMMA_MODELS)
-    def test_gemma_has_mlx_backend_notes(self, model_name: str):
-        """v3.4 backfills MLX backend notes onto the Gemma 4 family."""
-        config = _load_yaml()
-        ollama = _find_provider(config, "ollama")
-        model = _find_model(ollama, model_name)
-        notes = model.get("backend_notes")
-        assert notes is not None, f"{model_name}: missing backend_notes"
-        assert "mlx" in notes, f"{model_name}: backend_notes missing mlx"
-
-    @pytest.mark.parametrize("model_name", V3_3_GEMMA_MODELS)
-    def test_gemma_has_local_inference_block(self, model_name: str):
-        """Gemma entries also gain the local_inference block."""
-        config = _load_yaml()
-        ollama = _find_provider(config, "ollama")
-        model = _find_model(ollama, model_name)
-        local_inf = model.get("local_inference")
-        assert local_inf is not None, (
-            f"{model_name}: missing local_inference"
-        )
-        assert local_inf.get("mlx_supported") is True
 
 
 class TestEnginesYamlIntegrity:
@@ -351,16 +304,6 @@ class TestEnginesYamlIntegrity:
                 f"max_output_tokens={max_output}"
             )
 
-    def test_v34_count_growth(self):
-        """v3.4 added at least 8 new entries to the ollama provider."""
-        config = _load_yaml()
-        ollama = _find_provider(config, "ollama")
-        # 3 pre-existing Gemma + 8 new = 11 minimum.
-        assert len(ollama["models"]) >= 11, (
-            f"Expected ollama provider to have ≥11 models post-v3.4, "
-            f"got {len(ollama['models'])}"
-        )
-
 
 def _find_tiers_yaml() -> str:
     """Locate the synthesis-model-tiers tiers.yaml, or return ''.
@@ -373,7 +316,7 @@ def _find_tiers_yaml() -> str:
     if env_path and os.path.exists(env_path):
         return env_path
     candidates = [
-        os.path.join(os.path.dirname(__file__), "fixtures", "model-tier-preferences-2026-09-25.yaml"),
+        os.path.join(os.path.dirname(__file__), "fixtures", "model-tier-preferences-2026-11-06.yaml"),
         os.path.expanduser("~/.synthesis/skills/synthesis-model-tiers/tiers.yaml"),
         os.path.expanduser("~/.claude/skills/synthesis-model-tiers/tiers.yaml"),
         os.path.expanduser("~/.agents/skills/synthesis-model-tiers/tiers.yaml"),
@@ -424,7 +367,8 @@ class TestTierRoleConsistency:
     """
 
     @pytest.fixture(scope="class")
-    def tiers_config(self):
+    @classmethod
+    def tiers_config(cls):
         path = _find_tiers_yaml()
         if not path:
             pytest.skip(
@@ -494,7 +438,8 @@ class TestEnginesLoaderIntegration:
     """
 
     @pytest.fixture(scope="class")
-    def loader_fns(self):
+    @classmethod
+    def loader_fns(cls):
         try:
             from synthesis_engine.config import (  # type: ignore
                 load_engines_config,
@@ -512,18 +457,18 @@ class TestEnginesLoaderIntegration:
             "get_providers": get_providers,
         }
 
-    def test_loader_parses_v34_yaml(self, loader_fns):
-        """The loader parses the v3.4 engines.yaml without error."""
+    def test_loader_parses_engines_yaml(self, loader_fns):
+        """The loader parses engines.yaml without error."""
         config = loader_fns["load_engines_config"](force_reload=True)
         assert isinstance(config, dict)
         assert "engines" in config
 
     def test_loader_surfaces_all_ollama_models(self, loader_fns):
-        """get_all_models() includes the v3.4 ollama additions."""
+        """get_all_models() includes every current local model."""
         models = loader_fns["get_all_models"]()
         assert "ollama" in models
         ollama_names = {m["name"] for m in models["ollama"]}
-        for model_name, _, _, _ in V3_4_LOCAL_MODELS:
+        for model_name, _, _, _ in LOCAL_MODELS:
             assert model_name in ollama_names, (
                 f"Loader did not surface {model_name!r}"
             )

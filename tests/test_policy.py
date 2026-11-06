@@ -194,22 +194,22 @@ class TestIsModelAllowed:
             allowed_models=("anthropic/claude-*",),
             denied_models=("anthropic/claude-opus-*-preview*",),
         )
-        check = is_model_allowed(policy, "anthropic/claude-opus-4-8-preview")
+        check = is_model_allowed(policy, "anthropic/claude-opus-5-5-preview")
         assert check.allowed is False
         assert "denied_models" in check.reason
 
     def test_allowed_models_honored(self):
-        policy = RoutingPolicy(allowed_models=("openai/gpt-5*",))
-        check = is_model_allowed(policy, "openai/gpt-5.6-sol")
+        policy = RoutingPolicy(allowed_models=("openai/gpt-6*",))
+        check = is_model_allowed(policy, "openai/gpt-6.1-sol")
         assert check.allowed is True
         assert "allowed_models" in check.reason
 
     def test_glob_matching_anthropic(self):
         policy = RoutingPolicy(allowed_models=("anthropic/claude-*",))
         for mid in (
-            "anthropic/claude-sonnet-5",
-            "anthropic/claude-opus-4-8",
-            "anthropic/claude-haiku-4-5",
+            "anthropic/claude-sonnet-5-5",
+            "anthropic/claude-opus-5-5",
+            "anthropic/claude-haiku-5-5",
         ):
             check = is_model_allowed(policy, mid)
             assert check.allowed, mid
@@ -222,26 +222,42 @@ class TestIsModelAllowed:
 
     def test_empty_allowlist_allows_anything_not_denied(self):
         policy = RoutingPolicy()
-        check = is_model_allowed(policy, "anthropic/claude-opus-4-8")
+        check = is_model_allowed(policy, "anthropic/claude-opus-5-5")
         assert check.allowed is True
 
     def test_local_only_denies_non_local(self):
         policy = RoutingPolicy(local_only=True)
-        check = is_model_allowed(policy, "anthropic/claude-opus-4-8")
+        check = is_model_allowed(policy, "anthropic/claude-opus-5-5")
         assert check.allowed is False
         assert "local_only" in check.reason
 
-    def test_local_only_heuristic_allows_local_families(self):
+    def test_local_only_allows_every_configured_local_model(self):
+        from synthesis_engine.config import get_local_model_ids
+
         policy = RoutingPolicy(local_only=True)
-        for mid in (
-            "gemma/gemma-3-27b",
-            "qwen3/qwen-3-32b",
-            "llama-3-70b-instruct",
-            "deepseek/deepseek-v4",
-            "anthropic/claude-4-7:local",
-        ):
+        local = get_local_model_ids()
+        assert local, "engines.yaml should configure local models"
+        for mid in local + ["ollama_chat/a-model-pulled-by-hand:7b", "anthropic/self-hosted:local"]:
             check = is_model_allowed(policy, mid)
             assert check.allowed, mid
+
+    def test_local_only_refuses_ollama_cloud_tags(self):
+        # Ollama's :cloud tags run on Ollama's servers, so they are not local
+        # even though they route through the ollama_chat/ prefix.
+        policy = RoutingPolicy(local_only=True)
+        for mid in (
+            "ollama_chat/deepseek-v4.1-flash:cloud",
+            "ollama_chat/deepseek-v4-pro:0813-cloud",
+            "ollama/mistral-large-4:cloud",
+        ):
+            check = is_model_allowed(policy, mid)
+            assert check.allowed is False, mid
+
+    def test_denial_suggests_the_configured_default_local_model(self):
+        from synthesis_engine.config import get_local_model_ids
+
+        check = is_model_allowed(RoutingPolicy(local_only=True), "anthropic/claude-opus-5-5")
+        assert check.suggested_fallback == get_local_model_ids()[0] == "ollama_chat/gemma4:31b"
 
     def test_empty_model_id_is_denied(self):
         policy = RoutingPolicy()
@@ -516,7 +532,7 @@ class TestAuditLog:
             op_type="cross_workspace_synthesis",
             workspaces=["acme-news", "acme-user"],
             tools=["memory.read"],
-            model_id="anthropic/claude-opus-4-8",
+            model_id="anthropic/claude-opus-5-5",
             outcome="allowed",
             args_summary="{}",
         )
@@ -713,7 +729,7 @@ class TestAuditEntryShape:
             op_type="model_call",
             workspaces=["acme-news"],
             tools=["llm.complete"],
-            model_id="anthropic/claude-opus-4-8",
+            model_id="anthropic/claude-opus-5-5",
             outcome="denied",
             args_summary='{"prompt": "<redacted>"}',
             metadata={"effective_confidentiality": "CLIENT_CONFIDENTIAL"},

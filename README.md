@@ -323,7 +323,7 @@ Compiler targets in `compile-config.yaml` select models the same way, via `model
 Reasoning / Thinking Modes
 --------------------------
 
-Models that advertise thinking support in `engines.yaml` (Claude Fable 5 / Opus 4.8 / Sonnet 5 / Haiku 4.5, GPT-5.6 Sol/Terra, Gemini 3.x) are wired through LiteLLM's `reasoning_effort` parameter. Defaults: flagship models → `medium`, non-flagship with thinking → `off`, models without thinking metadata → silent (no params sent).
+Models that advertise thinking support in `engines.yaml` (Claude Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5, GPT-6 Astra / GPT-6.1 Sol / GPT-6.1 Terra / GPT-6 Luna, Gemini 4 Argon / 3.8 Flash / 3.5 Flash-Lite, and the hybrid-thinking local models) are wired through the catalog-validated `reasoning_effort` parameter. Cloud models default to their catalog effort and reject unsupported values; local flagships default to `medium`, other local models send no thinking parameter; models without thinking metadata → silent (no params sent).
 
 ```bash
 ragbot chat --thinking-effort high -p "explain this..."          # explicit high effort
@@ -518,9 +518,9 @@ Adding or updating models is an `engines.yaml` change, not a code change. See th
 
 ### Open-weights model support
 
-Ragbot v3.4 ships expanded local-model coverage out of the box. The `ollama` engine in [engines.yaml](engines.yaml) includes Gemma 4 (E4B, 26B MoE, 31B Dense), Llama 4 (Scout, Maverick), Qwen3.6 (27B Dense, 35B-A3B MoE), DeepSeek V3.2, and Mistral (Small 4, Medium 3.5, Large 3). Each entry carries MLX-backend notes, license info, recommended quantization tags, and a real-world parameter count.
+The `ollama` engine in [engines.yaml](engines.yaml) carries the current open-weights releases that run locally (verified November 2026): Gemma 4 (E4B, 12B, 26B MoE, 31B), Qwen3.8 27B and the Qwen3.8 Flash-Next 125B-A6B preview, Meta's Muse Glimmer 30B, NVIDIA's Nemotron 3.5 Super 120B-A12B, and Mistral Medium 3.5 128B. Each entry carries its Ollama tag, license, context window and tag sizes. Releases available on Ollama only as `:cloud` tags are left out, because Ragbot treats this provider as local.
 
-**Choosing a model for your Mac.** Open-weights inference on Apple Silicon is bound by unified memory and bandwidth. A 16 GB Mac mini runs Gemma 4 E4B; a Mac Studio with 256 GB unified memory runs DeepSeek V3.2 and Mistral Large 3. The [sizing matrix at `docs/sizing-matrix.md`](docs/sizing-matrix.md) maps every model in `engines.yaml` to each Mac hardware profile (Mac mini 16/32/64 GB, MacBook Air 24/32 GB, MacBook Pro M4 Pro 48 / M5 Max 128 GB, Mac Studio M3 Ultra 192/256 GB), with per-model memory footprints at FP16 and Q4, expected MLX tokens-per-second, and `comfortable / tight / Q4-only / won't fit` verdicts. Start there if you're trying to pick a model for your Mac, or pick a Mac for a model.
+**Choosing a model for your Mac.** Open-weights inference on Apple Silicon is bound by unified memory and bandwidth. A 16 GB Mac mini runs Gemma 4 12B; a 128 GB MacBook Pro runs Mistral Medium 3.5; a Mac Studio with 192 GB or more runs every model, including Qwen3.8 Flash-Next. The [sizing matrix at `docs/sizing-matrix.md`](docs/sizing-matrix.md) maps every model in `engines.yaml` to each Mac hardware profile (Mac mini 16/32/64 GB, MacBook Air 24/32 GB, MacBook Pro M4 Pro 48 / M5 Max 128 GB, Mac Studio M3 Ultra 192/256 GB), with memory footprints at FP16, Q8 and the default tag, and computed `comfortable / tight / won't fit` verdicts. Start there if you're trying to pick a model for your Mac, or pick a Mac for a model.
 
 Installation, Configuration, and Personalization
 ------------------------------------------------
@@ -606,8 +606,8 @@ ragbot chat -profile personal -p "What are my travel preferences?"
 # Use Anthropic Claude (loads claude.md instructions)
 ragbot chat -profile personal -e anthropic -p "Summarize my work history"
 
-# Use OpenAI GPT-5.2 (loads chatgpt.md instructions)
-ragbot chat -profile personal -e openai -m gpt-5.2 -p "Summarize my work history"
+# Use OpenAI GPT-6.1 Sol (loads chatgpt.md instructions)
+ragbot chat -profile personal -e openai -m gpt-6.1-sol -p "Summarize my work history"
 
 # Use Google Gemini (loads gemini.md instructions)
 ragbot chat -profile personal -e google -p "Summarize my work history"

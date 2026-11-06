@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Optional
 
 from fastapi import APIRouter, Query, Response
 
@@ -95,7 +94,7 @@ async def get_cache_stats(
           "total_input_tokens": 19368,
           "hit_rate": 0.6373,
           "per_model": {
-            "anthropic/claude-opus-4-7": {
+            "anthropic/claude-opus-5-5": {
               "samples": 30,
               "cache_read_tokens": 9000,
               "cache_creation_tokens": 5000,

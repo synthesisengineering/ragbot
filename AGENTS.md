@@ -164,26 +164,26 @@ Ragbot routes every LLM call through a backend interface (`src/ragbot/llm/`) so 
 
 Two backends ship:
 
-- **litellm** (default) — wraps `litellm.completion()`. Best provider/model coverage, handles long-tail provider quirks. Pinned `>=1.83.0` to avoid the March-2026 supply-chain incident range.
+- **litellm** (default) — wraps `litellm.completion()`. Best provider/model coverage, handles long-tail provider quirks. The floor in `requirements.txt` tracks the latest release (well past the March-2026 supply-chain incident range) and is the first that accepts openai 3.
 - **direct** — opt-in. Calls each provider's official SDK directly: `anthropic`, `openai`, `google-genai`. Smaller dependency surface, no third-party gateway. Useful for users who want to retire LiteLLM, or for benchmarking.
 
 Selection: `RAGBOT_LLM_BACKEND={litellm|direct}` (default `litellm`). The cached singleton is exposed via `ragbot.llm.get_llm_backend()`.
 
-Adding a new backend (e.g., Bifrost, Portkey, OpenRouter) is a single file implementing `LLMBackend` plus one selection arm in `__init__.py`. The backend swallows provider quirks (GPT-5.x `max_completion_tokens`, Claude 4.7+ `thinking.type.adaptive`, Anthropic-thinking-requires-temp-1, etc.) so the chat code path stays clean.
+Adding a new backend (e.g., Bifrost, Portkey, OpenRouter) is a single file implementing `LLMBackend` plus one selection arm in `__init__.py`. The backend swallows provider request rules (OpenAI's `max_completion_tokens`, Anthropic's adaptive thinking with `output_config` effort and no sampling parameters, Gemini's thinking levels) so the chat code path stays clean.
 
 ### Reasoning / Thinking Modes
 
-Models that advertise thinking support in `engines.yaml` are wired through the catalog-validated `reasoning_effort` parameter. Provider-native identities and supported effort levels come from that catalog; `docs/model-catalog-2026-09-25.yaml` records verification sources. Explicit model, effort and output-limit choices must survive final SDK serialization, including provider extension bodies. LiteLLM normalises that into the provider-native shape (e.g., `thinking={"type": "adaptive"}` for Claude 4.7+; Claude 4.8+/5.x additionally reject the `temperature` parameter — see `synthesis_engine/llm/base.py`).
+Models that advertise thinking support in `engines.yaml` are wired through the catalog-validated `reasoning_effort` parameter. Provider-native identities and supported effort levels come from that catalog; `docs/model-catalog-2026-11-06.yaml` records verification sources. Explicit model, effort and output-limit choices must survive final SDK serialization, including provider extension bodies. Anthropic models take adaptive thinking with the effort in `output_config` and never receive sampling parameters; Gemini models take a thinking level, never a budget; OpenAI models take `max_completion_tokens` (see `synthesis_engine/llm/model_parameters.py`).
 
 Default policy:
 
-- **Flagship models** with thinking support → `reasoning_effort: medium` automatically.
-- **Non-flagship models** with thinking support → off by default.
+- **Cloud models** carry strict contracts (`thinking.strict: true`): effort defaults to the model's `thinking.default`, and an explicit value must be one of its `modes` — an unsupported value is an error, never silently replaced.
+- **Local models**: a flagship with thinking support → `reasoning_effort: medium`; any other → no thinking parameter, leaving the model's own default.
 - Models without a `thinking:` block in `engines.yaml` → no thinking params sent.
 
 Override:
 
-- Per-call: pass `thinking_effort=` to `chat()` / `chat_stream()`. Supported values are model-specific and validated against `engines.yaml`; `off` and `auto` retain their control semantics.
+- Per-call: pass `thinking_effort=` to `chat()` / `chat_stream()`. Supported values are model-specific and validated against `engines.yaml`; `auto` selects the default, and `off` is honoured for local models (cloud models in the catalog always reason).
 - Globally: set `RAGBOT_THINKING_EFFORT=...` env var.
 
 Implementation in `src/ragbot/core.py::_resolve_thinking_for_model`.

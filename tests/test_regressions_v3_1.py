@@ -62,72 +62,10 @@ class TestBug2BudgetLoopContinuesPastOversizedChunks:
         assert kept[0]["text"] == "small"
 
 
-# ---------------------------------------------------------------------------
-# Bug 3: Anthropic extended thinking requires temperature=1.0; the resolver
-# now forces this whenever thinking is sent for Claude.
-# ---------------------------------------------------------------------------
-
-
-class TestBug3AnthropicThinkingForcesTemperature:
-    def test_pre_4_7_claude_with_explicit_effort_forces_temp_1(self, monkeypatch):
-        # Haiku 4.5 is the remaining pre-4.7 model: reasoning_effort path,
-        # temperature forced to 1 (extended thinking requires it).
-        from ragbot.core import _resolve_thinking_for_model
-        monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
-        out = _resolve_thinking_for_model(
-            "anthropic/claude-haiku-4-5-20251001",
-            requested_effort="medium",
-        )
-        assert out["reasoning_effort"] == "medium"
-        assert out["temperature"] == 1.0
-
-    def test_claude_4_8_plus_default_omits_temperature_with_adaptive_shape(self, monkeypatch):
-        # The 4.8+/5.x inverse of the original bug: the API now REJECTS the
-        # temperature parameter ("`temperature` is deprecated for this
-        # model", verified 2026-07-14), so the resolver must NOT send it.
-        from ragbot.core import _resolve_thinking_for_model
-        monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
-        out = _resolve_thinking_for_model("anthropic/claude-fable-5")
-        assert out["thinking"] == {"type": "adaptive"}
-        assert "temperature" not in out
-
-
-# ---------------------------------------------------------------------------
-# Bug 4: Claude 4.7+ requires the new ``thinking.type.adaptive`` API shape.
-# LiteLLM <=1.83.13's reasoning_effort mapper still emits the older
-# ``enabled`` shape, which Anthropic now rejects. The resolver bypasses
-# reasoning_effort for Claude 4.7+ and sends adaptive directly.
-# ---------------------------------------------------------------------------
-
-
-class TestBug4Claude47AdaptiveShape:
-    def test_opus_4_7_emits_adaptive_not_reasoning_effort(self, monkeypatch):
-        from ragbot.core import _resolve_thinking_for_model
-        monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
-        out = _resolve_thinking_for_model(
-            "anthropic/claude-opus-4-8",
-            requested_effort="high",
-        )
-        assert "reasoning_effort" not in out
-        assert out["thinking"] == {"type": "adaptive"}
-
-    def test_pre_4_7_claude_still_uses_reasoning_effort(self, monkeypatch):
-        from ragbot.core import _resolve_thinking_for_model
-        monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
-        out = _resolve_thinking_for_model(
-            "anthropic/claude-haiku-4-5-20251001",
-            requested_effort="high",
-        )
-        assert out["reasoning_effort"] == "high"
-        assert "thinking" not in out
-
-
-# ---------------------------------------------------------------------------
-# Bug 5: transformers had a hard pin on tokenizers<0.22 that was incompatible
-# with the tokenizers 0.22.x pulled in by the upgraded sentence-transformers.
-# requirements.txt now pins transformers>=5.6.0 (the version supporting
-# tokenizers 0.22.x).
-# ---------------------------------------------------------------------------
+# Bugs 3 and 4 (Claude 4.x thinking shapes and their temperature rules) were
+# retired on 2026-11-06 along with the models they concerned. Every Claude in
+# the catalog now takes adaptive thinking through output_config and never
+# receives sampling parameters; tests/test_catalog_refresh.py covers that.
 
 
 class TestBug5TransformersTokenizersCompat:
@@ -137,7 +75,7 @@ class TestBug5TransformersTokenizersCompat:
         # raising ImportError("tokenizers>=0.21,<0.22 is required ...").
         #
         # ``sentence_transformers`` is a hard requirement (requirements.txt
-        # pins >=5.4.0), but it pulls in torch which weighs several hundred
+        # pins >=6.2.0), but it pulls in torch which weighs several hundred
         # MB. Dev machines without a full install would otherwise see this
         # regression test FAIL rather than SKIP. importorskip preserves the
         # regression coverage on Docker / CI where the dep is installed,

@@ -377,7 +377,7 @@ def test_single_session_extracts_entities_and_relations(
     )
     report = asyncio.run(
         consolidator.consolidate_session(
-            planted_session, model_id="anthropic/claude-haiku-4-5"
+            planted_session, model_id="anthropic/claude-haiku-5-5"
         )
     )
     assert isinstance(report, ConsolidationReport)
@@ -401,7 +401,7 @@ def test_single_session_extracts_entities_and_relations(
     parsed = _parse_provenance_source(src)
     assert parsed is not None
     assert parsed[0] == planted_session
-    assert parsed[1] == "anthropic/claude-haiku-4-5"
+    assert parsed[1] == "anthropic/claude-haiku-5-5"
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +418,7 @@ def test_idempotent_same_session_and_model(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -427,7 +427,7 @@ def test_idempotent_same_session_and_model(
     report2 = asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -450,7 +450,7 @@ def test_different_model_accumulates_provenance(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -460,7 +460,7 @@ def test_different_model_accumulates_provenance(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-opus-4-8",
+            model_id="anthropic/claude-opus-5-5",
             workspace="acme-news",
         )
     )
@@ -476,10 +476,10 @@ def test_different_model_accumulates_provenance(
     # Both passes are present.
     assert len(authored) == 2
     haiku_runs = [
-        s for s in sources if "model=anthropic/claude-haiku-4-5" in s
+        s for s in sources if "model=anthropic/claude-haiku-5-5" in s
     ]
     opus_runs = [
-        s for s in sources if "model=anthropic/claude-opus-4-8" in s
+        s for s in sources if "model=anthropic/claude-opus-5-5" in s
     ]
     assert haiku_runs, "expected Haiku pass to be recorded"
     assert opus_runs, "expected Opus pass to be recorded"
@@ -499,7 +499,7 @@ def test_dry_run_does_not_write(
     report = asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
             dry_run=True,
         )
@@ -640,7 +640,7 @@ def test_idle_skips_already_consolidated_same_model(
         consolidator.consolidate_recent_idle(
             idle_threshold_hours=4.0,
             workspace="acme-news",
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
         )
     )
     # Second run with the same model id should skip.
@@ -648,7 +648,7 @@ def test_idle_skips_already_consolidated_same_model(
         consolidator.consolidate_recent_idle(
             idle_threshold_hours=4.0,
             workspace="acme-news",
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
         )
     )
     assert report2.sessions_consolidated == 0
@@ -667,7 +667,7 @@ def test_audit_log_records_per_consolidation(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -681,7 +681,7 @@ def test_audit_log_records_per_consolidation(
     assert len(consolidation_entries) == 1
     e = consolidation_entries[0]
     assert e["workspaces"] == ["acme-news"]
-    assert e["model_id"] == "anthropic/claude-haiku-4-5"
+    assert e["model_id"] == "anthropic/claude-haiku-5-5"
     assert e["metadata"]["session_id"] == planted_session
 
 
@@ -720,7 +720,7 @@ def test_api_post_consolidate_single_session(
         "/api/memory/consolidate",
         json={
             "session_id": planted_session,
-            "model_id": "anthropic/claude-haiku-4-5",
+            "model_id": "anthropic/claude-haiku-5-5",
             "workspace": "acme-news",
         },
     )
@@ -750,7 +750,7 @@ def test_api_consolidation_history(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -818,7 +818,7 @@ def test_missing_session_skipped(memory_backend, fake_llm, audit_log):
     consolidator = MemoryConsolidator(memory_backend, llm_backend=fake_llm)
     report = asyncio.run(
         consolidator.consolidate_session(
-            "no-such-session-id", model_id="anthropic/claude-haiku-4-5"
+            "no-such-session-id", model_id="anthropic/claude-haiku-5-5"
         )
     )
     assert report.skipped is True
@@ -836,14 +836,14 @@ def test_provenance_source_round_trip():
     iso = "2026-05-14T10:00:00+00:00"
     s = _build_provenance_source(
         session_id="sess-acme-001",
-        model_id="anthropic/claude-haiku-4-5",
+        model_id="anthropic/claude-haiku-5-5",
         run_at_iso=iso,
     )
     parsed = _parse_provenance_source(s)
     assert parsed is not None
     sid, mid, run = parsed
     assert sid == "sess-acme-001"
-    assert mid == "anthropic/claude-haiku-4-5"
+    assert mid == "anthropic/claude-haiku-5-5"
     assert run == iso
     # Reject malformed inputs
     assert _parse_provenance_source("session:abc123") is None
@@ -904,7 +904,7 @@ def test_llm_called_once_per_session(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -913,7 +913,7 @@ def test_llm_called_once_per_session(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -978,7 +978,7 @@ def test_read_consolidation_history_filters(
             op_type="cross_workspace_synthesis",
             workspaces=["acme-news", "acme-user"],
             tools=["search"],
-            model_id="anthropic/claude-opus-4-8",
+            model_id="anthropic/claude-opus-5-5",
             outcome="allowed",
         )
     )
@@ -987,7 +987,7 @@ def test_read_consolidation_history_filters(
             op_type="tool_call",
             workspaces=["acme-news"],
             tools=["web_search"],
-            model_id="anthropic/claude-opus-4-8",
+            model_id="anthropic/claude-opus-5-5",
             outcome="allowed",
         )
     )
@@ -996,7 +996,7 @@ def test_read_consolidation_history_filters(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )
@@ -1023,7 +1023,7 @@ def test_cli_tabular_output_for_history(
     asyncio.run(
         consolidator.consolidate_session(
             planted_session,
-            model_id="anthropic/claude-haiku-4-5",
+            model_id="anthropic/claude-haiku-5-5",
             workspace="acme-news",
         )
     )

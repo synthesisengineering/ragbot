@@ -9,7 +9,7 @@ the response/result data onto the span and into the metric registry.
 Usage pattern (LLM call):
 
     with chat_completion_span(
-        model="anthropic/claude-opus-4-7",
+        model="anthropic/claude-opus-5-5",
         provider="anthropic",
         max_tokens=4096,
         temperature=1.0,
@@ -200,7 +200,7 @@ def chat_completion_span(
     """Wrap an LLM completion call with a GenAI-conformant span.
 
     The span is named per the OTEL GenAI spec: ``"<operation> <model>"``
-    (e.g., ``"chat anthropic/claude-opus-4-7"``).
+    (e.g., ``"chat anthropic/claude-opus-5-5"``).
 
     Parameters mirror the LLMRequest data contract; only the ones the
     caller has are required. Unknown fields can be passed via ``extra``.

@@ -77,22 +77,12 @@ def _strip_provider(model: str) -> str:
 
 
 # Shared, version-aware predicates — see synthesis_engine.llm.base.
-from .base import claude_rejects_temperature as _claude_rejects_temperature
-from .base import is_claude_4_7_or_newer as _is_claude_4_7_or_newer
 
 
 # ---------------------------------------------------------------------------
 # Effort → Anthropic budget tokens (heuristic, used when caller asks for a
 # specific effort level on Claude 4.7+ which only accepts adaptive mode).
 # ---------------------------------------------------------------------------
-
-
-_EFFORT_TO_BUDGET = {
-    "minimal": 1024,
-    "low": 4096,
-    "medium": 16384,
-    "high": 64000,
-}
 
 
 # ---------------------------------------------------------------------------
@@ -216,22 +206,14 @@ class DirectBackend(LLMBackend):
         if system_out:
             kwargs["system"] = system_out
 
-        thinking = request.thinking
-        if thinking is None and request.reasoning_effort:
-            if _is_claude_4_7_or_newer(request.model):
-                budget = _EFFORT_TO_BUDGET.get(request.reasoning_effort, 16384)
-                thinking = {"type": "adaptive", "budget_tokens": budget}
-            else:
-                # Older claude — still uses enabled shape.
-                budget = _EFFORT_TO_BUDGET.get(request.reasoning_effort, 16384)
-                thinking = {"type": "enabled", "budget_tokens": budget}
-
-        if thinking is not None:
-            kwargs["thinking"] = thinking
-            if not _claude_rejects_temperature(request.model):
-                kwargs["temperature"] = 1.0
-        elif request.temperature is not None and not _claude_rejects_temperature(request.model):
-            kwargs["temperature"] = request.temperature
+        # Adaptive thinking with the effort in output_config. Anthropic's API
+        # (version 2026-10-21) rejects sampling parameters for every model,
+        # so temperature is never sent.
+        if request.thinking is not None:
+            kwargs["thinking"] = request.thinking
+        elif request.reasoning_effort:
+            kwargs["thinking"] = {"type": "adaptive"}
+            kwargs["output_config"] = {"effort": request.reasoning_effort}
 
         # Strip substrate-internal config keys from the passthrough.
         if request.extra:
@@ -382,12 +364,9 @@ class DirectBackend(LLMBackend):
             "model": _strip_provider(request.model),
             "messages": request.messages,
         }
-        # GPT-5.x uses max_completion_tokens.
-        model_lower = request.model.lower()
-        if "gpt-5" in model_lower or "gpt5" in model_lower:
-            kwargs["max_completion_tokens"] = request.max_tokens
-        else:
-            kwargs["max_tokens"] = request.max_tokens
+        # OpenAI's current models are reasoning models and take
+        # max_completion_tokens.
+        kwargs["max_completion_tokens"] = request.max_tokens
         if request.temperature is not None:
             kwargs["temperature"] = request.temperature
         if request.reasoning_effort:
@@ -508,7 +487,8 @@ class DirectBackend(LLMBackend):
         return self._google_client
 
     def _build_google_request(self, request: LLMRequest):
-        google_genai = self._import_google_genai()
+        # Fails with an actionable error when google-genai is not installed.
+        self._import_google_genai()
         # Concatenate non-system messages into a single contents list,
         # per google-genai's chat-style usage. System messages become
         # config.system_instruction.
@@ -530,8 +510,9 @@ class DirectBackend(LLMBackend):
             config_kwargs: Dict[str, Any] = {}
             if system_instruction:
                 config_kwargs["system_instruction"] = system_instruction
-            if request.temperature is not None:
-                config_kwargs["temperature"] = request.temperature
+            # Sampling parameters are deprecated and ignored on current Gemini
+            # models, and Google says later generations will reject them, so
+            # temperature is never sent.
             if request.max_tokens:
                 config_kwargs["max_output_tokens"] = request.max_tokens
             from .model_parameters import model_contract, resolve_effort
@@ -545,12 +526,10 @@ class DirectBackend(LLMBackend):
                 effort = resolve_effort(info, request.reasoning_effort)
                 config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=effort)
             elif request.reasoning_effort:
-                # Models declaring a numeric budget retain their documented shape.
-                budget = _EFFORT_TO_BUDGET.get(request.reasoning_effort)
-                if budget and hasattr(types, "ThinkingConfig"):
-                    config_kwargs["thinking_config"] = types.ThinkingConfig(
-                        thinking_budget=budget,
-                    )
+                # Current Gemini models take a thinking level, never a budget.
+                config_kwargs["thinking_config"] = types.ThinkingConfig(
+                    thinking_level=request.reasoning_effort,
+                )
             config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
         except ImportError:
             config = None

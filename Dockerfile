@@ -1,27 +1,28 @@
 # Dockerfile for Ragbot.AI
 # FastAPI backend for CLI and React web interface
 
-FROM python:3.12-slim as base
+# Python 3.14 is the newest release every dependency ships wheels for, on
+# both linux/amd64 and linux/arm64 (checked 2026-11-06; 3.15 still lacks
+# wheels for PyYAML, fastuuid and orjson). With wheels for everything, the
+# image needs no compiler.
+FROM python:3.14-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore
 
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc && \
-    rm -rf /var/lib/apt/lists/*
-
-FROM base as dependencies
+FROM base AS dependencies
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-FROM base as final
+FROM base AS final
 
-COPY --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=dependencies /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=dependencies /usr/local/bin /usr/local/bin
 
 COPY src/ ./src/

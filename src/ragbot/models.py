@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from synthesis_engine.config import get_default_model
 from synthesis_engine.models import ModelInfo
 
 
@@ -35,8 +36,11 @@ class ChatRequest(BaseModel):
     prompt: str = Field(..., description="User's message")
     workspace: Optional[str] = Field(None, description="Workspace name for context")
     model: str = Field(
-        "anthropic/claude-sonnet-4-6",
-        description="Model identifier (provider/name) recognised by LiteLLM.",
+        default_factory=get_default_model,
+        description=(
+            "Model identifier (provider/name) recognised by LiteLLM. "
+            "Defaults to engines.yaml's default model."
+        ),
     )
     temperature: Optional[float] = Field(
         None,
@@ -111,7 +115,7 @@ class ConfigResponse(BaseModel):
     ai_knowledge_root: Optional[str] = None
     workspace_count: int = 0
     rag_available: bool = False
-    default_model: str = "anthropic/claude-sonnet-4-6"
+    default_model: str = Field(default_factory=get_default_model)
     default_workspace: Optional[str] = None
     api_keys: Dict[str, bool] = Field(
         default_factory=dict,

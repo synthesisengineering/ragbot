@@ -272,11 +272,58 @@ def get_all_models() -> Dict[str, List[Dict[str, Any]]]:
     return result
 
 
+# LiteLLM routes these prefixes to an Ollama server, which Ragbot treats as
+# self-hosted: the request never reaches a third-party model API.
+LOCAL_MODEL_PREFIXES = ("ollama_chat/", "ollama/")
+
+
+def get_local_model_ids() -> List[str]:
+    """Return the id of every locally served model in engines.yaml.
+
+    The local provider's ``default_model`` comes first, then the rest in
+    file order, so callers that need one local model can take the head of
+    the list.
+    """
+    config = load_engines_config()
+    defaults = {
+        engine["name"]: normalize_model_id(engine["name"], engine["default_model"])
+        for engine in config.get("engines", [])
+        if engine.get("default_model")
+    }
+    ids: List[str] = []
+    for provider, models in get_all_models().items():
+        local = [m["id"] for m in models if m.get("is_local")]
+        default = defaults.get(provider)
+        if default in local:
+            local.remove(default)
+            local.insert(0, default)
+        ids.extend(local)
+    return ids
+
+
+def is_local_model_id(model_id: str) -> bool:
+    """True when ``model_id`` is served locally rather than by a cloud API.
+
+    Local means an Ollama-routed id (``ollama_chat/...``, ``ollama/...``), a
+    model engines.yaml lists under a local provider, or an id the operator
+    tagged with ``:local``. Ollama's cloud tags (``:cloud``, ``:0813-cloud``)
+    run on Ollama's servers, so they are never local, whatever their prefix.
+    """
+    if not model_id:
+        return False
+    tag = model_id.rsplit(":", 1)[1] if ":" in model_id else ""
+    if tag == "cloud" or tag.endswith("-cloud"):
+        return False
+    if ":local" in model_id or model_id.startswith(LOCAL_MODEL_PREFIXES):
+        return True
+    return model_id in get_local_model_ids()
+
+
 def get_model_info(model_id: str) -> Optional[Dict[str, Any]]:
     """Get information about a specific model.
 
     Args:
-        model_id: Model identifier (e.g., 'anthropic/claude-sonnet-4-5-20250929')
+        model_id: Model identifier (e.g., 'anthropic/claude-sonnet-5-5')
 
     Returns:
         Model configuration dict, or None if not found
@@ -298,9 +345,9 @@ def get_provider_for_model(model_id: str) -> str:
 
     Args:
         model_id: Model identifier in any format:
-            - Full litellm format: 'anthropic/claude-sonnet-4-5-20250929'
-            - Just model name: 'claude-sonnet-4-5-20250929'
-            - With provider prefix: 'openai/gpt-5.2'
+            - Full litellm format: 'anthropic/claude-sonnet-5-5'
+            - Just model name: 'claude-sonnet-5-5'
+            - With provider prefix: 'openai/gpt-6.1-sol'
 
     Returns:
         Provider name ('anthropic', 'openai', 'google') or 'anthropic' as fallback
@@ -366,8 +413,9 @@ def get_default_model() -> str:
     if default_provider in all_models and all_models[default_provider]:
         return all_models[default_provider][0]['id']
 
-    # Ultimate fallback
-    return "anthropic/claude-sonnet-4-5-20250929"
+    raise ConfigurationError(
+        f"engines.yaml configures no models for the default provider {default_provider!r}"
+    )
 
 
 def get_temperature_settings() -> Dict[str, float]:
@@ -425,16 +473,16 @@ def get_model_by_tier(provider: str, tier: str) -> Optional[str]:
 
     Tiers defined in engines.yaml (same vocabulary as the
     synthesis-model-tiers skill's tiers.yaml — labels name the work):
-    - "bulk": Fast, cost-effective models (Haiku, GPT-5.6 Luna, Flash Lite)
-    - "routine": Balanced models (Sonnet, GPT-5.6 Terra, Flash)
-    - "judgment": Most capable models (Fable, Opus, GPT-5.6 Sol, Gemini Pro)
+    - "bulk": Fast, cost-effective models (Haiku, GPT-6 Luna, Flash-Lite)
+    - "routine": Balanced models (Sonnet, GPT-6.1 Sol, Flash)
+    - "judgment": Most capable models (Fable, Opus, GPT-6 Astra, Gemini 4 Argon)
 
     Args:
         provider: Provider name ('anthropic', 'openai', 'google')
         tier: Model tier ('bulk', 'routine', 'judgment')
 
     Returns:
-        Model ID in LiteLLM format (e.g., 'anthropic/claude-haiku-4-5-20251001'),
+        Model ID in LiteLLM format (e.g., 'anthropic/claude-haiku-5-5'),
         or None if no model found for that provider/tier
     """
     all_models = get_all_models()
@@ -447,6 +495,25 @@ def get_model_by_tier(provider: str, tier: str) -> Optional[str]:
     return None
 
 
+def get_default_model_for_tier(tier: str) -> str:
+    """The default provider's model for ``tier`` ('bulk', 'routine', 'judgment').
+
+    For callers that need a model without one being chosen for them:
+    background consolidation runs on the bulk tier, cross-workspace synthesis
+    on the judgment tier. Raises ConfigurationError when engines.yaml has no
+    model of that tier for its default provider, rather than guessing one.
+    """
+    provider = load_engines_config().get('default')
+    if not provider:
+        raise ConfigurationError("engines.yaml declares no default provider")
+    model = get_model_by_tier(provider, tier)
+    if model is None:
+        raise ConfigurationError(
+            f"engines.yaml has no {tier!r}-tier model for the default provider {provider!r}"
+        )
+    return model
+
+
 def get_fast_model_for_provider(model_id: str) -> Optional[str]:
     """Get the fast (bulk-tier) model for the same provider as model_id.
 
@@ -455,11 +522,11 @@ def get_fast_model_for_provider(model_id: str) -> Optional[str]:
     model. This ensures consistent API key usage and billing.
 
     Example:
-        get_fast_model_for_provider("anthropic/claude-fable-5")
-        → "anthropic/claude-haiku-4-5-20251001"
+        get_fast_model_for_provider("anthropic/claude-fable-5-1")
+        → "anthropic/claude-haiku-5-5"
 
-        get_fast_model_for_provider("openai/gpt-5.6-sol")
-        → "openai/gpt-5.6-luna"
+        get_fast_model_for_provider("openai/gpt-6.1-sol")
+        → "openai/gpt-6-luna"
 
     Args:
         model_id: The user's selected model ID

@@ -200,7 +200,7 @@ Response Generated
 context = get_relevant_context(
     workspace_name="personal",
     query="What is my background?",
-    user_model="anthropic/claude-sonnet-4",
+    user_model="anthropic/claude-sonnet-5-5",
     use_phase2=True,   # Query intelligence
     use_phase3=True    # Hybrid search + reranking
 )

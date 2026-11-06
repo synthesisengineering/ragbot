@@ -140,7 +140,7 @@ def compile_with_anthropic(content: str, model: str, api_key: str) -> str:
 
     Args:
         content: Source instructions content
-        model: Model ID (e.g., 'claude-opus-4-5-20251101')
+        model: Model ID (e.g., 'claude-opus-5-5')
         api_key: Anthropic API key
 
     Returns:

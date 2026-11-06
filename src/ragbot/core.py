@@ -43,14 +43,15 @@ def _resolve_thinking_for_model(
     Resolution order:
         1. Explicit ``requested_effort`` argument (per-call override).
         2. ``RAGBOT_THINKING_EFFORT`` env var.
-        3. Engines.yaml "thinking" block for the model: when present and
-           supported, default to ``medium`` for flagship models, otherwise
-           ``off``. Non-flagship models default to ``off``.
+        3. Engines.yaml "thinking" block for the model: strict (cloud)
+           contracts use their catalog default; a local flagship with
+           thinking support defaults to ``medium``; any other local model
+           gets no parameter, which keeps the model's own default.
 
-    The returned dict can be merged into ``completion_kwargs``. Possible
-    keys: ``reasoning_effort`` (cross-provider; LiteLLM normalises to the
-    correct provider-specific shape) — or empty dict when thinking is off
-    or unsupported.
+    An explicit ``off`` for a local model returns ``reasoning_effort: none``,
+    which switches thinking off. The returned dict can be merged into
+    ``completion_kwargs``; it is empty when no thinking parameter should be
+    sent (the model's own default applies, or it has no thinking support).
     """
 
     import os
@@ -83,10 +84,13 @@ def _resolve_thinking_for_model(
         # medium; everything else sends no thinking parameter, which leaves
         # the model's own default in place (Qwen3.8 thinks by default, for
         # example). Their `modes` name hybrid behaviours, not effort levels.
-        effort = "medium" if info.get("is_flagship") else "off"
+        return {"reasoning_effort": "medium"} if info.get("is_flagship") else {}
 
     if effort == "off":
-        return {}
+        # An explicit off has to reach the server: sending nothing would leave
+        # a model that thinks by default thinking. LiteLLM sends Ollama
+        # ``think: false`` for ``none``.
+        return {"reasoning_effort": "none"}
 
     # Only non-strict entries reach this point: every cloud model in
     # engines.yaml carries a strict contract (handled above), so these are

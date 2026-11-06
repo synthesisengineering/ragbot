@@ -93,9 +93,16 @@ class TestResolveThinkingForModel:
         out = _resolve_thinking_for_model("ollama_chat/qwen3.8:27b", requested_effort="high")
         assert out == {"reasoning_effort": "high"}
 
-    def test_local_per_call_off_sends_nothing(self, monkeypatch):
+    @pytest.mark.parametrize("model", ["ollama_chat/qwen3.8:27b", "ollama_chat/gemma4:12b"])
+    def test_local_per_call_off_switches_thinking_off(self, monkeypatch, model):
+        # Both think by default, so off has to reach the server: LiteLLM
+        # sends Ollama think: false for "none". Sending nothing kept thinking on.
         monkeypatch.setenv("RAGBOT_THINKING_EFFORT", "high")
-        assert _resolve_thinking_for_model("ollama_chat/qwen3.8:27b", requested_effort="off") == {}
+        assert _resolve_thinking_for_model(model, requested_effort="off") == {"reasoning_effort": "none"}
+
+    def test_local_env_off_switches_thinking_off(self, monkeypatch):
+        monkeypatch.setenv("RAGBOT_THINKING_EFFORT", "off")
+        assert _resolve_thinking_for_model("ollama_chat/gemma4:26b") == {"reasoning_effort": "none"}
 
     def test_local_flagship_with_thinking_defaults_to_medium(self, monkeypatch):
         import synthesis_engine.config as config
@@ -108,6 +115,13 @@ class TestResolveThinkingForModel:
         assert _resolve_thinking_for_model("ollama_chat/example:1b") == {"reasoning_effort": "medium"}
 
     def test_model_without_thinking_metadata_ignores_overrides(self, monkeypatch):
-        # Gemma 4 entries carry no thinking block.
+        import synthesis_engine.config as config
+
         monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
-        assert _resolve_thinking_for_model("ollama_chat/gemma4:31b", requested_effort="high") == {}
+        monkeypatch.setattr(config, "get_model_info", lambda model: {"id": model})
+        assert _resolve_thinking_for_model("ollama_chat/example:1b", requested_effort="high") == {}
+        assert _resolve_thinking_for_model("ollama_chat/example:1b", requested_effort="off") == {}
+
+    def test_local_flagship_gemma4_defaults_to_medium(self, monkeypatch):
+        monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
+        assert _resolve_thinking_for_model("ollama_chat/gemma4:31b") == {"reasoning_effort": "medium"}

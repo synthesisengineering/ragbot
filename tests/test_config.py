@@ -316,9 +316,14 @@ class TestModelMetadata:
         assert flat.get('anthropic/claude-opus-5-5', {}).get('supports_thinking') is True
         assert flat.get('anthropic/claude-haiku-5-5', {}).get('supports_thinking') is True
         assert flat.get('openai/gpt-6-luna', {}).get('supports_thinking') is True
-        # Qwen3.8 declares hybrid thinking; Gemma 4 entries carry no thinking block.
+        # Local entries declare hybrid thinking where Ollama reports the
+        # capability (Qwen3.8, Gemma 4).
         assert flat.get('ollama_chat/qwen3.8:27b', {}).get('supports_thinking') is True
-        assert flat.get('ollama_chat/gemma4:31b', {}).get('supports_thinking') is False
+        assert flat.get('ollama_chat/gemma4:12b', {}).get('supports_thinking') is True
+        # The flag mirrors the declared block for every entry.
+        for model in flat.values():
+            declared = bool((model.get('thinking') or {}).get('supported'))
+            assert model.get('supports_thinking') is declared, model['id']
 
     def test_is_local_is_true_only_for_ollama(self):
         """Only Ollama models are local; cloud-provider models are not."""

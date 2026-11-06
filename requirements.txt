@@ -85,7 +85,7 @@ pydantic>=2.13.5
 # broken tree, which is the failure mode a floor-only constraint cannot catch.
 # Moving to mcp 2.x is a real migration across those four modules, not a pin
 # change; until that is done deliberately, this stays on the 1.x line.
-mcp>=1.27.1,<2
+mcp>=2.3.0,<3
 
 # --- Background-task scheduling ------------------------------------------
 # Powers synthesis_engine.tasks.scheduler — the cron-style loop that drives

@@ -236,7 +236,7 @@ Follow-up in this pass: the comment block above the openai line, which explained
 a cap that no longer exists, now explains the pairing. The LiteLLM floor rises
 from 1.102.1 to 1.108.0, so the requirement states the real constraint.
 
-### #148 — mcp 2.x: closed, migration under way
+### #148 — mcp 2.x: closed, then ported
 
 `mcp>=2.3.0,<3` failed to import in six test modules. mcp 2.x is a redesign
 rather than a rename:
@@ -247,4 +247,62 @@ rather than a rename:
 - `AnyUrl` left `mcp.types`;
 - `ClientSession.call_tool` gained an input-required and request-state flow.
 
-Porting the MCP layer is a change of its own, made on a separate branch.
+#148 was closed because a requirement bump could not carry that. The port
+landed in its own pull request the same day; the "mcp 2.x port" section
+below records it.
+
+## mcp 2.x port
+
+Ragbot moved from mcp 1.27.1 to 2.3.0, the current release. What changed in
+Ragbot, by area:
+
+- **Client primitives.** List calls take `params=PaginatedRequestParams(...)`
+  rather than `cursor=`. Resource URIs are plain strings. Callbacks receive a
+  `ClientRequestContext`. Types expose snake_case attributes (`next_cursor`,
+  `is_error`, `structured_content`); camelCase still works when constructing
+  them.
+- **Tasks.** The SDK has no client task helpers, and its method tables leave
+  `tasks/*` out of the core protocol. Ragbot's sessions negotiate 2025-11-25,
+  where tasks are core methods, so `synthesis_engine.mcp.tasks` sends the typed
+  `tools/call`-with-task, `tasks/get`, `tasks/result`, `tasks/list` and
+  `tasks/cancel` requests itself, and polls at the server's suggested interval.
+- **Streamable HTTP client.** `streamable_http_client` takes an
+  `httpx2.AsyncClient`; Ragbot builds it with the server's headers, timeout and
+  OAuth provider. The OAuth callback now returns an `AuthorizationCodeResult`
+  and carries the RFC 9207 `iss` parameter.
+- **Ragbot's MCP server.** The low-level server takes handlers as constructor
+  arguments and no longer validates or packages tool calls. The handler now
+  validates arguments against each tool's input schema, returns structured
+  content with its JSON text, validates it against the output schema, and turns
+  failures into `is_error` results — what 1.x did implicitly.
+- **Proxy.** The relay passes pages through by cursor and returns tool results
+  whole. Under 1.x it collected every page and returned only a tool result's
+  content, dropping `isError` and structured content.
+
+Defects found while porting, fixed in the same change:
+
+- **Tool errors read as success in the agent loop.** `_coerce_tool_output`
+  read `isError`, which 2.x types do not have. A failed MCP tool call would
+  have reached the agent as successful output. It now reads `is_error`; a test
+  pins it, and the same input on the pre-port code returns the error text as
+  output.
+- **HTTP bearer resolution.** The token travelled to the tool handler through
+  a `ContextVar` set in the ASGI layer, which the SDK's session tasks do not
+  reliably see. The handler now resolves the token from the HTTP request it is
+  serving, and refuses an HTTP request it cannot authenticate.
+- **HTTP lifecycle.** `asgi_app_factory` forwarded ASGI lifespan events to a
+  session manager that was never started. It now wraps the SDK's
+  `streamable_http_app`, which runs the manager for the app's lifetime, and
+  serves at `/mcp`.
+- **Reflected HTML in the OAuth callback page.** The loopback page wrote the
+  redirect's `error` parameter into HTML unescaped; it is now escaped.
+- **Frontend field names.** `web/src/lib/api.ts` declares `input_schema` and
+  `mime_type`, but 1.x types serialized as `inputSchema` and `mimeType`, so the
+  resource MIME badge never rendered. 2.x serializes snake_case; tests pin the
+  shape the web client reads.
+
+Verification: 1035 tests pass and 13 skip, up from 1015 on `main`. New tests
+cover task polling and paging over real JSON-RPC, proxy pass-through, tool-call
+validation and error results, unknown-resource errors, fail-closed bearer
+resolution, and a Streamable HTTP round trip through Uvicorn that checks a 401
+without a token and `allowed_tools` enforcement with one.

@@ -2000,7 +2000,6 @@ def _ensure_demo_indexed() -> None:
             get_index_status,
             index_content,
             index_skills,
-            init_collection,
         )
     except Exception:
         # Imports might fail in narrow contexts (e.g., db status). Skip
@@ -2016,7 +2015,8 @@ def _ensure_demo_indexed() -> None:
     if indexed and count > 0:
         return
 
-    init_collection(DEMO_WORKSPACE_NAME)
+    # index_content initialises the workspace at the embedding model's
+    # dimension, so there is no separate init step here.
     source_dir = workspace_path / 'source'
     for category in ('datasets', 'runbooks', 'instructions'):
         category_dir = source_dir / category

@@ -114,6 +114,10 @@ class VectorStore(ABC):
 
     backend_name: str = "abstract"
 
+    def close(self) -> None:
+        """Release the backend's connections. Idempotent; backends that hold
+        none need not override it."""
+
     @abstractmethod
     def init_collection(self, workspace: str, vector_size: int) -> bool:
         """Ensure the workspace's storage exists and holds ``vector_size``-
@@ -237,10 +241,12 @@ def get_vector_store(refresh: bool = False) -> Optional[VectorStore]:
 
 
 def reset_vector_store() -> None:
-    """Drop the cached backend (test hook)."""
+    """Close and drop the cached backend (test hook)."""
 
     global _BACKEND
-    _BACKEND = None
+    backend, _BACKEND = _BACKEND, None
+    if backend is not None:
+        backend.close()
 
 
 __all__ = [

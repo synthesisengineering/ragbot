@@ -15,11 +15,13 @@ The schema is documented in ``migrations/0001_initial.sql``.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import re
 import secrets
 import threading
+import weakref
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -237,7 +239,21 @@ class PgvectorBackend(VectorStore):
                 open=False,
             )
             self._pool.open()
+            # Close the pool before the interpreter finalizes. Left to the
+            # pool's own __del__, the close runs during finalization, where
+            # Python 3.14 refuses to join its worker threads and every CLI
+            # command that touched the database ended with a
+            # PythonFinalizationError traceback. The weak reference keeps
+            # the hook from holding a discarded backend's pool open.
+            atexit.register(_close_pool_at_exit, weakref.ref(self._pool))
             return self._pool
+
+    def close(self) -> None:
+        """Close the connection pool, if one was opened. Idempotent."""
+        with self._pool_lock:
+            pool, self._pool = self._pool, None
+        if pool is not None:
+            pool.close()
 
     def _connection(self):
         """Acquire a pooled connection with the pgvector type registered."""
@@ -810,6 +826,12 @@ class PgvectorBackend(VectorStore):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _close_pool_at_exit(pool_ref) -> None:
+    pool = pool_ref()
+    if pool is not None and not pool.closed:
+        pool.close()
 
 
 class _VectorConn:

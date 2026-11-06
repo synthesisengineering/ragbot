@@ -100,7 +100,7 @@ ragbot index --workspace {name}
 The RAG pipeline:
 1. Reads `.md` files from `source/` (respecting inheritance)
 2. Chunks content using sentence-transformers
-3. Generates embeddings with `all-MiniLM-L6-v2`
+3. Generates embeddings with the model in `engines.yaml` (`microsoft/harrier-oss-v1-0.6b`)
 4. Upserts to the pgvector store (PostgreSQL with the `pgvector` extension)
 
 ## Inheritance Configuration

@@ -45,8 +45,17 @@ openai>=3.46.0,<4
 google-genai>=3.0.0
 # Capability-only registration must preserve missing prices and explicit effort.
 # Verified offline transformation: docs/model-catalog-2026-11-06.yaml.
-# 1.108.0 is also the first release that accepts openai 3 (see above).
-litellm>=1.108.1
+# 1.108.0 is the first release that accepts openai 3 (see above).
+#
+# The floor is the 1.109.0 release candidate because it is the first LiteLLM
+# that accepts filelock 4: every release from 1.104.0 through 1.108.1 caps
+# filelock below 4, and filelock 3.x carries 13 CVEs fixed only in 4.x. pip
+# installs the candidate today and moves to 1.109.0 itself once it is released,
+# since the final release satisfies this floor.
+litellm>=1.109.0rc1
+# Transitive (torch, huggingface_hub, litellm), declared so the patched major is
+# the floor (4.2.1 fixed the CVEs that 3.32.7 carries; 4.2.9 is the latest).
+filelock>=4.2.9
 tiktoken>=0.14.0
 
 # --- LangChain (used by some downstream callers) -------------------------
@@ -61,7 +70,7 @@ sentence-transformers>=6.2.0
 # transformers must keep up with sentence-transformers' tokenizers pin —
 # otherwise a stale transformers errors out at import time. Track 5.6+
 # which supports tokenizers 0.22.x.
-transformers>=5.22.1
+transformers>=5.22.2
 
 # --- Vector store backend ------------------------------------------------
 psycopg[binary,pool]>=3.3.8       # pgvector backend driver with built-in connection pool

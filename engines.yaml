@@ -476,22 +476,47 @@ engines:
 default: anthropic
 
 # Embedding model for RAG chunk vectors (pgvector). This is a separate config
-# axis from the chat `engines:` above — it's a local sentence-transformers
-# model, not an LLM provider — documented here so this file stays the true
-# single source of truth for model config rather than the value living only
-# in an env var default buried in src/rag.py.
+# axis from the chat `engines:` above: a local sentence-transformers model,
+# not an LLM provider. This block is the only place it is set — there is no
+# environment override — because the model, the dimension the schema stores
+# and the query instruction have to change together.
 #
-# Actual config: EMBEDDING_MODEL env var (see .env.example). Runtime default
-# when unset matches embedding.default_model below. Changing the model
-# requires a full re-index — existing chunk rows tag the model that produced
-# them (see vectorstore/migrations/0001_initial.sql), so mixing vintages in
-# one searchable index silently degrades retrieval quality.
+# Model: Microsoft's harrier-oss-v1-0.6b (MIT licence, March 2026), 1,024
+# dimensions, 32,768-token context, 69.0 on Multilingual MTEB v2 per its model
+# card. It replaced all-MiniLM-L6-v2 (384 dimensions, 256-token context).
+#
+#   revision          Pinned Hugging Face commit. A model repo can be updated
+#                     in place; an unpinned load would then embed new queries
+#                     differently from the indexed chunks, and would run
+#                     whatever the repo serves that day. Move it deliberately,
+#                     with a re-index.
+#   dimensions        Must equal the pgvector column, which migration
+#                     0004_embedding_dimensions.sql sets. The vector store
+#                     refuses to index or search when they differ.
+#   dtype             float32. The weights ship in bfloat16, but CPU inference
+#                     in bfloat16 measured 0.3 chunks/s on Apple Silicon
+#                     against 4.4 in float32 (2026-11-06). The cost is memory:
+#                     the API container peaks at about 4.6 GB while loading.
+#   max_seq_length    Caps tokens per input. Chunks are about 500 tokens; skill
+#                     scripts are embedded whole, and the cap keeps one long
+#                     file from taking the model's full 32K-token window.
+#   query_prompt_name The model is instruction-tuned for retrieval: queries
+#                     carry this prompt from the model's own prompt table,
+#                     documents carry none. Encoding queries without it costs
+#                     retrieval quality.
+#
+# Changing the model, revision or dimensions requires a full re-index
+# (`ragbot index --workspace <name> --force`); each chunk records the model
+# version that embedded it, so mixed vintages are detectable.
 embedding:
-  default_model: all-MiniLM-L6-v2
-  dimensions: 384
   provider: sentence-transformers
-  local_inference: true
-  env_var: EMBEDDING_MODEL
+  model: microsoft/harrier-oss-v1-0.6b
+  revision: f9b9dc8d367d443f2479d27aa5d8d2850c0774ee
+  dimensions: 1024
+  dtype: float32
+  max_seq_length: 8192
+  batch_size: 16
+  query_prompt_name: web_search_query
 
 # Preset creativity temperature settings.
 temperature_settings:

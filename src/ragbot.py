@@ -1503,12 +1503,25 @@ def run_db_init(args):
         print(f"`db init` is a no-op for {vs.backend_name}; nothing to do.")
         return 0
 
-    # Pgvector backend runs migrations on construction; explicit re-trigger
-    # by calling init_collection(workspace='_init_') is harmless and confirms
-    # the schema is applied.
-    ok = vs.init_collection('_init_check_', vector_size=384)
-    print("Schema migrations applied." if ok else "Migration failed (see logs).")
-    return 0 if ok else 1
+    # The pgvector backend runs migrations before its first schema read, so
+    # reading the stored embedding dimension both applies them and confirms
+    # the schema matches the embedding model engines.yaml declares.
+    from synthesis_engine.config import get_embedding_config
+
+    expected = get_embedding_config().dimensions
+    try:
+        stored = vs.schema_dimension()
+    except Exception as exc:
+        print(f"Migration failed: {exc}")
+        return 1
+    if stored != expected:
+        print(
+            f"Schema migrations applied, but the schema stores {stored}-dimension "
+            f"embeddings and engines.yaml declares {expected}."
+        )
+        return 1
+    print(f"Schema migrations applied. Embeddings: {stored} dimensions, as engines.yaml declares.")
+    return 0
 
 
 def run_memory_consolidate(args):

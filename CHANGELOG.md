@@ -18,6 +18,21 @@ compatibility with superseded models, runtimes and SDK versions is not kept.
   Every cloud model has a strict request contract. Superseded models are removed,
   including `gemini-3.1-flash-lite-preview`, which Google shut down on 2026-05-25, and
   three local tags Ollama no longer serves locally.
+- **Embedding model.** RAG embeds with Microsoft's `harrier-oss-v1-0.6b` (MIT licence,
+  1,024 dimensions, 32K-token context) in place of all-MiniLM-L6-v2 (384 dimensions,
+  256 tokens). `engines.yaml`'s `embedding:` block is now the only place the model is set,
+  with a pinned Hugging Face revision; the `EMBEDDING_MODEL` environment override is gone.
+  - Queries carry the model's retrieval instruction (`web_search_query`); documents carry
+    none.
+  - Indexing embeds chunks in batches instead of one model call per chunk.
+  - Migration `0004_embedding_dimensions.sql` moves both vector columns to 1,024
+    dimensions. It clears the chunk index and entity embeddings (entities are kept), so
+    every workspace needs `ragbot index --workspace <name> --force` after upgrading.
+  - The vector store reads its schema dimension and refuses to index or search with
+    vectors of another size; `ragbot db init` and `ragbot db status` report it.
+  - The API container keeps downloaded models in a `ragbot-hf-cache` volume.
+  - The model needs about 4.6 GB while loading in float32. Docker Desktop's default 4 GB
+    is not enough; allow it at least 8 GB.
 - **MCP SDK 2.x** (#157). The client primitives, tasks, transports, OAuth callback, proxy
   and Ragbot's MCP server are ported to mcp 2.3.0.
 - **Runtimes and images.**
@@ -59,8 +74,10 @@ compatibility with superseded models, runtimes and SDK versions is not kept.
   issues among them) are resolved. Transitive advisories (sharp, brace-expansion,
   minimatch, postcss-selector-parser, vite, zod, undici) are cleared by overrides and
   lockfile updates.
-- Still open: 13 CVEs in `filelock` 3.32.7. LiteLLM 1.108.1 caps it below 4; the next
-  stable LiteLLM is expected to lift the cap (1.109.0rc1 already has). See
+- 13 CVEs in `filelock` 3.32.7 are resolved: `filelock` 4.2.9 installs. Every stable
+  LiteLLM release from 1.104.0 through 1.108.1 caps it below 4, so the LiteLLM floor is
+  the 1.109.0 release candidate, the first that accepts it; pip moves to 1.109.0 on its
+  own once that ships. `pip-audit` reports no known vulnerabilities. See
   `docs/security/dependabot-triage-2026-11.md`.
 
 ## 3.8.1 — 2026-09-25

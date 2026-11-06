@@ -175,6 +175,7 @@ class PgvectorBackend(VectorStore):
         self._pool = None
         self._pool_lock = threading.Lock()
         self._migrated = False
+        self._schema_dimension: Optional[int] = None
         self._min_size = min_size
         self._max_size = max_size
 
@@ -319,13 +320,57 @@ class PgvectorBackend(VectorStore):
     # interface implementations
     # ------------------------------------------------------------------
 
-    def init_collection(self, workspace: str, vector_size: int = 384) -> bool:
-        # Schema is shared; "init" simply ensures the workspace row exists
-        # and migrations are applied. The vector_size argument is informational
-        # (the schema fixes the embedding dimension; mismatches will error
-        # when upserting, which is the right loud failure).
+    def schema_dimension(self) -> int:
+        """The embedding dimension the ``chunks.embedding`` column stores.
+
+        Read from the catalog, where pgvector keeps a ``vector(n)`` column's
+        dimension as its type modifier, and cached: only a migration changes
+        it, and migrations run once per process before this is first read.
+        """
+        if self._schema_dimension is None:
+            self._run_migrations()
+            with self._connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT atttypmod FROM pg_attribute "
+                        "WHERE attrelid = 'chunks'::regclass AND attname = 'embedding'"
+                    )
+                    row = cur.fetchone()
+            if row is None or row[0] <= 0:
+                raise RuntimeError("chunks.embedding has no fixed vector dimension")
+            self._schema_dimension = int(row[0])
+        return self._schema_dimension
+
+    def _require_dimension(self, vectors: Sequence[List[float]]) -> None:
+        """Refuse vectors whose dimension the schema does not store.
+
+        pgvector rejects them too, but deep inside a transaction and with a
+        message that does not say which model or setting is wrong.
+        """
+        expected = self.schema_dimension()
+        for vector in vectors:
+            if len(vector) != expected:
+                raise ValueError(
+                    f"Embedding has {len(vector)} dimensions; the pgvector schema "
+                    f"stores {expected}. The embedding model in engines.yaml and "
+                    "the schema migrations disagree."
+                )
+
+    def init_collection(self, workspace: str, vector_size: int) -> bool:
+        # Schema is shared; "init" ensures migrations are applied, the schema
+        # stores `vector_size`-dimension vectors, and the workspace row exists.
         try:
             self._run_migrations()
+            stored = self.schema_dimension()
+            if stored != vector_size:
+                logger.error(
+                    "PgvectorBackend.init_collection: the embedding model produces "
+                    "%d-dimension vectors but the schema stores %d. Align "
+                    "engines.yaml's embedding block with the migrations, then "
+                    "re-index.",
+                    vector_size, stored,
+                )
+                return False
             with self._connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -342,6 +387,7 @@ class PgvectorBackend(VectorStore):
     def upsert_points(self, workspace: str, points: List[Point]) -> int:
         if not points:
             return 0
+        self._require_dimension([p.vector for p in points])
         # Group points by source_path so each unique document gets a single row.
         documents_by_path: Dict[str, Point] = {}
         for p in points:
@@ -469,6 +515,7 @@ class PgvectorBackend(VectorStore):
         content_type: Optional[str] = None,
         content_tiers: Optional[Sequence[str]] = None,
     ) -> List[SearchHit]:
+        self._require_dimension([query_vector])
         tiers = _resolve_tiers(content_tiers)
         with retrieval_span(
             workspace=workspace,
@@ -754,6 +801,7 @@ class PgvectorBackend(VectorStore):
                 "ok": row is not None,
                 "pgvector_version": row[0] if row else None,
                 "workspaces": workspaces_count,
+                "embedding_dimension": self.schema_dimension(),
             }
         except Exception as exc:
             return {"backend": self.backend_name, "ok": False, "reason": str(exc)}

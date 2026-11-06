@@ -52,6 +52,9 @@ from dataclasses import dataclass
 from enum import Enum
 from collections import Counter
 
+from synthesis_engine.config import get_embedding_config
+from synthesis_engine.exceptions import ConfigurationError
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -1161,66 +1164,92 @@ _embedding_model = None
 
 
 def _get_embedding_model():
-    """Get or create embedding model (lazy initialization)."""
-    global _embedding_model
-    if _embedding_model is None:
-        try:
-            from sentence_transformers import SentenceTransformer
+    """Load the embedding model declared in engines.yaml (lazy, cached).
 
-            # Use a small, fast model that works well for retrieval
-            # all-MiniLM-L6-v2 is 80MB and produces 384-dim embeddings
-            model_name = os.environ.get('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
-            logger.info(f"Loading embedding model: {model_name}")
-            _embedding_model = SentenceTransformer(model_name)
-        except ImportError:
-            logger.warning("sentence-transformers not installed. RAG features disabled.")
-            return None
-        except Exception as e:
-            logger.error(f"Failed to load embedding model: {e}")
-            return None
+    Returns None when sentence-transformers is not installed or the model
+    cannot be loaded, so callers degrade to chat without retrieval. Raises
+    ConfigurationError when the loaded model contradicts engines.yaml (wrong
+    dimension, missing query prompt): indexing or searching with such a model
+    would write vectors the schema cannot hold, or rank results with the wrong
+    instruction, so that failure must not be silent.
+    """
+    global _embedding_model
+    if _embedding_model is not None:
+        return _embedding_model
+
+    config = get_embedding_config()
+    try:
+        import torch
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        logger.warning("sentence-transformers not installed. RAG features disabled.")
+        return None
+
+    try:
+        logger.info("Loading embedding model: %s (revision %s)", config.model, config.revision)
+        model = SentenceTransformer(
+            config.model,
+            revision=config.revision,
+            model_kwargs={"dtype": getattr(torch, config.dtype)},
+        )
+    except Exception as e:
+        logger.error(f"Failed to load embedding model {config.model}: {e}")
+        return None
+
+    model.max_seq_length = config.max_seq_length
+    dimension = model.get_embedding_dimension()
+    if dimension != config.dimensions:
+        raise ConfigurationError(
+            f"Embedding model {config.model} produces {dimension}-dimension vectors; "
+            f"engines.yaml declares {config.dimensions}"
+        )
+    if config.query_prompt_name and config.query_prompt_name not in model.prompts:
+        raise ConfigurationError(
+            f"Embedding model {config.model} has no prompt named "
+            f"{config.query_prompt_name!r}; it defines: {', '.join(sorted(model.prompts))}"
+        )
+    _embedding_model = model
     return _embedding_model
 
 
-def _get_embedding_dimension(model) -> int:
-    """Return the embedding dimension regardless of sentence-transformers version.
+def _encode_documents(model, texts: List[str]) -> List[List[float]]:
+    """Embed chunk texts for storage, batched.
 
-    The library renamed ``get_sentence_embedding_dimension`` →
-    ``get_embedding_dimension`` in 5.x and emits a FutureWarning on the old
-    name. We prefer the new method and fall back to the old one for older
-    library versions.
+    Documents carry no instruction prompt; only queries do (see
+    ``_encode_query``).
     """
-
-    if hasattr(model, "get_embedding_dimension"):
-        return model.get_embedding_dimension()
-    # Fallback for older sentence-transformers versions; suppress the
-    # deprecation warning since this branch only runs on libraries that
-    # don't yet expose the new name.
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        return model.get_sentence_embedding_dimension()
+    if not texts:
+        return []
+    config = get_embedding_config()
+    vectors = model.encode_document(
+        texts, batch_size=config.batch_size, show_progress_bar=False
+    )
+    return [vector.tolist() for vector in vectors]
 
 
-def _get_embedding_model_version(embedding_model_name: str) -> Optional[str]:
+def _encode_query(model, query: str) -> List[float]:
+    """Embed a search query with the retrieval instruction from engines.yaml."""
+    config = get_embedding_config()
+    return model.encode_query(query, prompt_name=config.query_prompt_name).tolist()
+
+
+def _get_embedding_model_version() -> str:
     """Build a version string that captures embedding drift finer than the
     bare model name.
 
-    ``chunks.embedding_model`` (existing since migration 0001) already
-    records the model *name* (e.g. "all-MiniLM-L6-v2"). This function adds
-    the ``sentence-transformers`` package version, since the same model
-    checkpoint can produce different embeddings across library versions
-    (tokenization/pooling changes). The combined string is what future
-    drift detection compares to decide whether a chunk needs re-embedding.
+    ``chunks.embedding_model`` (existing since migration 0001) records the
+    model *name*. This adds the pinned revision and the
+    ``sentence-transformers`` package version, since the same checkpoint can
+    produce different embeddings across library versions (tokenization or
+    pooling changes). The combined string is what drift detection compares
+    to decide whether a chunk needs re-embedding.
     """
-    try:
-        import sentence_transformers
-        pkg_version = getattr(sentence_transformers, '__version__', None)
-    except ImportError:
-        pkg_version = None
+    import sentence_transformers
 
-    if pkg_version:
-        return f"{embedding_model_name}@sentence-transformers-{pkg_version}"
-    return embedding_model_name
+    return (
+        f"{get_embedding_config().version}"
+        f"+sentence-transformers-{sentence_transformers.__version__}"
+    )
 
 
 def _hash_chunk_text(text: str) -> str:
@@ -1264,13 +1293,14 @@ def get_collection_name(workspace_name: str) -> str:
     return f"ragbot_{safe_name}"
 
 
-def init_collection(workspace_name: str, vector_size: int = 384) -> bool:
+def init_collection(workspace_name: str, vector_size: int) -> bool:
     """
     Initialize the workspace's storage in the configured vector backend.
 
     Args:
         workspace_name: Name of the workspace
-        vector_size: Dimension of embedding vectors (384 for MiniLM)
+        vector_size: Dimension of the embedding model's vectors; the backend
+            refuses when its schema stores a different dimension
 
     Returns:
         True if storage is ready, False otherwise
@@ -1318,11 +1348,11 @@ def index_content(workspace_name: str, content_paths: list, content_type: str = 
     if vs is None or model is None:
         return {'error': 'RAG not available', 'indexed': 0}
 
-    embedding_model_name = os.environ.get('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
-    embedding_model_version = _get_embedding_model_version(embedding_model_name)
+    embedding_model_name = get_embedding_config().model
+    embedding_model_version = _get_embedding_model_version()
 
     # Ensure storage exists for this workspace
-    if not init_collection(workspace_name, _get_embedding_dimension(model)):
+    if not init_collection(workspace_name, model.get_embedding_dimension()):
         return {'error': 'Failed to initialize collection', 'indexed': 0}
 
     # Configure chunking for RAG (smaller chunks, title extraction)
@@ -1336,13 +1366,13 @@ def index_content(workspace_name: str, content_paths: list, content_type: str = 
     # Chunk all files
     chunks = chunk_files(content_paths, config)
 
-    # Generate embeddings and build VectorStore Point objects
-    points = []
-    for idx, chunk in enumerate(chunks):
+    # Build each chunk's embedding text with document context for better
+    # semantic matching, then embed them in batches: one model call per
+    # chunk leaves most of the model's throughput unused.
+    embedding_texts = []
+    for chunk in chunks:
         filename = chunk.metadata.get('filename', '')
         title = chunk.metadata.get('title', '')
-
-        # Build embedding text with document context for better semantic matching
         embedding_parts = []
         if filename:
             readable_filename = filename.rsplit('.', 1)[0].replace('-', ' ').replace('_', ' ')
@@ -1350,9 +1380,13 @@ def index_content(workspace_name: str, content_paths: list, content_type: str = 
         if title:
             embedding_parts.append(f"Title: {title}")
         embedding_parts.append(chunk.text)
+        embedding_texts.append('\n'.join(embedding_parts))
+    embeddings = _encode_documents(model, embedding_texts)
 
-        embedding_text = '\n'.join(embedding_parts)
-        embedding = model.encode(embedding_text).tolist()
+    points = []
+    for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
+        filename = chunk.metadata.get('filename', '')
+        title = chunk.metadata.get('title', '')
 
         # Strip large/duplicate fields from metadata (text + structural fields are stored
         # in dedicated columns / payload keys; the rest goes into the JSONB metadata column).
@@ -1553,7 +1587,7 @@ def search(workspace_name: str, query: str, limit: int = 5,
 
     try:
         # Generate query embedding using preprocessed query
-        query_vector = model.encode(search_query).tolist()
+        query_vector = _encode_query(model, search_query)
 
         hits = vs.search(
             workspace_name,
@@ -1666,7 +1700,7 @@ def search_archive(workspace_name: str, query: str, limit: int = 10,
         search_query = query
 
     try:
-        query_vector = model.encode(search_query).tolist()
+        query_vector = _encode_query(model, search_query)
         vector_hits = vs.search(
             workspace_name, query_vector=query_vector, limit=limit,
             content_tiers=['archive-only'],
@@ -2098,7 +2132,7 @@ def get_index_status(workspace_name: str) -> tuple[bool, int]:
         return False, 0
 
 
-def _build_skill_chunks(skill, embedding_model_name: str, model) -> List["VectorStorePoint"]:
+def _build_skill_chunks(skill, model) -> List["VectorStorePoint"]:
     """Generate vector-store Points for every indexable file inside a skill.
 
     Each chunk is tagged with ``skill_name`` plus a content_type derived
@@ -2114,7 +2148,10 @@ def _build_skill_chunks(skill, embedding_model_name: str, model) -> List["Vector
 
     from synthesis_engine.skills.model import SkillFileKind  # local to avoid module-load cost
 
-    points: List[VectorStorePoint] = []
+    embedding_model_name = get_embedding_config().model
+    embedding_model_version = _get_embedding_model_version()
+    # (point fields, embedding text) per chunk; embedded in one batch below.
+    pending: List[Tuple[Dict[str, Any], str]] = []
 
     kind_to_content_type = {
         SkillFileKind.SKILL_MD: 'skill',
@@ -2172,8 +2209,6 @@ def _build_skill_chunks(skill, embedding_model_name: str, model) -> List["Vector
                 embedding_parts.append(f"Skill description: {skill.description[:200]}")
             embedding_parts.append(chunk.text)
 
-            embedding = model.encode('\n'.join(embedding_parts)).tolist()
-
             chunk_uid = f"{skill.name}::{sf.relative_path}::{idx}"
 
             metadata = {
@@ -2185,9 +2220,8 @@ def _build_skill_chunks(skill, embedding_model_name: str, model) -> List["Vector
                 'skill_description': skill.description,
             }
 
-            points.append(VectorStorePoint(
+            pending.append((dict(
                 chunk_uid=chunk_uid,
-                vector=embedding,
                 text=chunk.text,
                 chunk_index=idx,
                 char_start=chunk.metadata.get('char_start'),
@@ -2199,11 +2233,15 @@ def _build_skill_chunks(skill, embedding_model_name: str, model) -> List["Vector
                 embedding_model=embedding_model_name,
                 content_tier='topic-specific',
                 content_hash=_hash_chunk_text(chunk.text),
-                embedding_model_version=_get_embedding_model_version(embedding_model_name),
+                embedding_model_version=embedding_model_version,
                 metadata=metadata,
-            ))
+            ), '\n'.join(embedding_parts)))
 
-    return points
+    embeddings = _encode_documents(model, [text for _, text in pending])
+    return [
+        VectorStorePoint(vector=embedding, **fields)
+        for (fields, _), embedding in zip(pending, embeddings, strict=True)
+    ]
 
 
 def index_skills(workspace_name: str = 'skills', skill_roots: Optional[List[str]] = None,
@@ -2232,14 +2270,13 @@ def index_skills(workspace_name: str = 'skills', skill_roots: Optional[List[str]
     if vs is None or model is None:
         return {'error': 'RAG not available', 'skills_indexed': 0, 'chunks_indexed': 0}
 
-    embedding_model_name = os.environ.get('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
-
-    if not init_collection(workspace_name, _get_embedding_dimension(model)):
+    dimension = model.get_embedding_dimension()
+    if not init_collection(workspace_name, dimension):
         return {'error': 'Failed to initialize collection', 'skills_indexed': 0}
 
     if force:
         vs.delete_collection(workspace_name)
-        init_collection(workspace_name, _get_embedding_dimension(model))
+        init_collection(workspace_name, dimension)
 
     skills = discover_skills(roots=skill_roots) if skill_roots else discover_skills()
     if only:
@@ -2250,7 +2287,7 @@ def index_skills(workspace_name: str = 'skills', skill_roots: Optional[List[str]
     indexed_names: List[str] = []
     skipped: List[str] = []
     for skill in skills:
-        points = _build_skill_chunks(skill, embedding_model_name, model)
+        points = _build_skill_chunks(skill, model)
         if not points:
             skipped.append(skill.name)
             continue

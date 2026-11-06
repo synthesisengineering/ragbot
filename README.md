@@ -405,12 +405,12 @@ Based on benchmarks from Anthropic, Microsoft, and other research:
 | Enable RAG | On | Toggle RAG-augmented responses |
 | RAG context tokens | 16000 | Maximum tokens for retrieved context |
 | Confidence threshold | 0.7 | CRAG triggers below this score |
-| Embedding model | all-MiniLM-L6-v2 | 384-dimension embeddings |
+| Embedding model | microsoft/harrier-oss-v1-0.6b | 1,024-dimension embeddings; set in `engines.yaml` |
 
 ### Technical Details
 
 - **Vector Database**: PostgreSQL with the `pgvector` extension (default DSN via `RAGBOT_DATABASE_URL`; bundled `postgres` service in `docker-compose.yml`)
-- **Embedding Model**: sentence-transformers `all-MiniLM-L6-v2` (80MB, 384 dimensions)
+- **Embedding Model**: sentence-transformers `microsoft/harrier-oss-v1-0.6b` (MIT licence, 1,024 dimensions, 32K-token context, pinned revision), run locally in float32; queries carry the model's retrieval instruction, documents none
 - **Chunking**: ~500 tokens per chunk with 50-token overlap
 - **Similarity**: Cosine distance for semantic matching
 

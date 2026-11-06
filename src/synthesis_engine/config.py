@@ -5,6 +5,7 @@ All model and provider configuration is loaded from engines.yaml - never hardcod
 """
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import yaml
@@ -430,6 +431,84 @@ def get_temperature_settings() -> Dict[str, float]:
         'balanced': 0.50,
         'creative': 0.75,
     })
+
+
+@dataclass(frozen=True)
+class EmbeddingConfig:
+    """The embedding model that produces RAG chunk and query vectors.
+
+    Declared by the ``embedding:`` block of engines.yaml, which is the only
+    place it is set: the model, the dimension the pgvector schema stores, and
+    the query instruction all have to change together, so there is no
+    separate environment override that could change one without the others.
+    """
+
+    provider: str
+    model: str
+    revision: str
+    dimensions: int
+    dtype: str
+    max_seq_length: int
+    batch_size: int
+    query_prompt_name: Optional[str]
+
+    @property
+    def version(self) -> str:
+        """Model identity recorded on each chunk for drift detection.
+
+        The pinned revision fixes the weights; the sentence-transformers
+        version is added by the caller, because the same weights can embed
+        differently across library releases.
+        """
+        return f"{self.model}@{self.revision}"
+
+
+_EMBEDDING_REQUIRED_KEYS = (
+    'provider', 'model', 'revision', 'dimensions', 'dtype',
+    'max_seq_length', 'batch_size',
+)
+
+
+def get_embedding_config() -> EmbeddingConfig:
+    """Read and validate the ``embedding:`` block of engines.yaml.
+
+    Raises ConfigurationError when a required key is missing or malformed,
+    rather than falling back to a model the schema was not built for.
+    """
+    block = load_engines_config().get('embedding')
+    if not isinstance(block, dict):
+        raise ConfigurationError("engines.yaml has no 'embedding' block")
+    missing = [key for key in _EMBEDDING_REQUIRED_KEYS if block.get(key) in (None, '')]
+    if missing:
+        raise ConfigurationError(
+            f"engines.yaml 'embedding' block is missing: {', '.join(missing)}"
+        )
+    if block['provider'] != 'sentence-transformers':
+        raise ConfigurationError(
+            f"Unsupported embedding provider {block['provider']!r}; "
+            "Ragbot embeds locally with sentence-transformers"
+        )
+    if block['dtype'] not in ('float32', 'bfloat16', 'float16'):
+        raise ConfigurationError(
+            f"Unsupported embedding dtype {block['dtype']!r}; "
+            "use float32, bfloat16 or float16"
+        )
+    for key in ('dimensions', 'max_seq_length', 'batch_size'):
+        value = block[key]
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ConfigurationError(
+                f"engines.yaml embedding.{key} must be a positive integer, got {value!r}"
+            )
+    return EmbeddingConfig(
+        provider=block['provider'],
+        model=str(block['model']),
+        revision=str(block['revision']),
+        dimensions=block['dimensions'],
+        dtype=block['dtype'],
+        max_seq_length=block['max_seq_length'],
+        batch_size=block['batch_size'],
+        query_prompt_name=block.get('query_prompt_name') or None,
+    )
 
 
 def check_api_keys(workspace: Optional[str] = None) -> Dict[str, bool]:

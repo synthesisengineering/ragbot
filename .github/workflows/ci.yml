@@ -24,8 +24,15 @@ on:
 # A superseded run on the same ref carries no information. Cancel it rather
 # than paying for it, but never cancel a run on main — those are the ones the
 # history is read from.
+#
+# On main the group is keyed by commit, not by ref. `cancel-in-progress: false`
+# alone does not protect main: a concurrency group holds one running and one
+# pending run, and a newer pending run replaces the older one. When several
+# pull requests merged within a minute on 2026-11-06, every intermediate main
+# run was cancelled that way, so those commits had no CI result. A group per
+# commit gives each push to main its own run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
@@ -109,3 +116,12 @@ jobs:
 
       - name: Run the test suite
         run: npm run test
+
+      # Lint and the unit suite never run the production build, which is where
+      # Next.js type-checks the app and where it refuses to build a version
+      # with known security advisories. Without this step, a `next` version that
+      # cannot build passes CI: PR #124 at next 16.4.0 stayed green here, and on
+      # 2026-11-06 `next build` on that version exited 1. See
+      # docs/security/dependabot-triage-2026-11.md.
+      - name: Build
+        run: npm run build

@@ -158,6 +158,11 @@ class LiteLLMBackend(LLMBackend):
         # Drop unsupported params at the LiteLLM layer; we still build kwargs
         # carefully ourselves above to avoid round-tripping wrong values.
         litellm.drop_params = True
+        # LiteLLM prints a "Provider List" banner to stdout whenever one of its
+        # internal lookups misses, including lookups it catches itself (a
+        # reasoning setting for an Ollama model is one). Errors that reach us
+        # still raise with their full message.
+        litellm.suppress_debug_info = True
 
     def complete(self, request: LLMRequest) -> LLMResponse:
         cache_cfg = CacheConfig.from_extra(request.extra)

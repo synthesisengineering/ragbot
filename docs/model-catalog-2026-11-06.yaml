@@ -266,6 +266,7 @@ local_models:
     context_window: 262144
     license: apache-2.0
     local_tag_verified: true
+    thinking: hybrid, on by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
   gemma4:26b:
     sources:
     - ollama-gemma4
@@ -273,6 +274,7 @@ local_models:
     context_window: 262144
     license: apache-2.0
     local_tag_verified: true
+    thinking: hybrid, on by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
   gemma4:12b:
     sources:
     - ollama-gemma4
@@ -282,6 +284,7 @@ local_models:
     license: apache-2.0
     released: '2026-06-03'
     local_tag_verified: true
+    thinking: hybrid, on by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
   gemma4:e4b:
     sources:
     - ollama-gemma4
@@ -289,6 +292,7 @@ local_models:
     context_window: 131072
     license: apache-2.0
     local_tag_verified: true
+    thinking: hybrid, off by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
   qwen3.8:27b:
     sources:
     - ollama-qwen3.8

@@ -1,5 +1,50 @@
 # Changelog
 
+## 4.0.1 — 2026-11-06
+
+Retrieval helpers work again with every provider, and reranking orders results
+by the model's judgment.
+
+### Fixed
+
+- **Query planning, expansion, HyDE, reranking and verification** call the
+  bulk-tier model through the configured LLM backend at the least reasoning it
+  allows: thinking off for local models, the lowest declared effort for cloud
+  models. The helper used to call LiteLLM directly. That way:
+  - A local Gemma 4 12B, which thinks by default, spent the reranker's whole
+    500-token budget reasoning and returned nothing, so reranking never ran.
+  - Claude Haiku 5.5 and GPT-6 Luna rejected its fixed `temperature=0.3`, so
+    every helper silently fell back for Anthropic and OpenAI chats.
+  - API keys were looked up under the environment-variable name, which the
+    keystore does not use, so keys in `~/.synthesis/keys.yaml` never reached
+    these calls.
+  The output budget now comes from the model's `default_max_tokens`, and a
+  failed helper call logs the model and the cause.
+- **Reranking orders results by the LLM's judgment.** Retrieval scores differ in
+  scale by source: cosine similarity for vector hits, a full-text rank that can
+  exceed 8 for keyword hits, and an RRF score near 0.03 for fused hits. Mixing a
+  raw score with the 0-10 judgment let keyword hits the model scored 0 outrank
+  the chunk it scored 10. On a personal workspace this buried the one relevant
+  note at eighth place, and the chat answered that it had no record. Now:
+  - Retrieval strength is scaled to 0-1 before the mix.
+  - Results past the top 20 follow in retrieval order instead of re-sorting
+    above the reranked ones on raw scores.
+  - A skipped rerank keeps the retrieval order.
+  - The context labels each chunk with the combined 0-1 score instead of its raw
+    score.
+- **Hybrid search fuses with RRF whenever either list has hits.** It used to
+  return raw scores when one list was empty or keyword search failed, and those
+  outranked every RRF score in the shared sort. The HyDE boost now applies to the
+  key results are sorted by.
+- **`thinking_effort: off` switches thinking off for local models.** It used to
+  send no parameter, which left a model that thinks by default thinking. It now
+  sends `reasoning_effort: none`, which LiteLLM passes to Ollama as
+  `think: false`.
+- **Gemma 4 entries in `engines.yaml` declare their hybrid thinking.** Ollama
+  reports the capability for all four. 12B, 26B and 31B think by default; E4B
+  does not. The 31B flagship now defaults to medium effort, as other local
+  flagships with thinking do.
+
 ## 4.0.0 — 2026-11-06
 
 Ragbot moves every dependency, runtime and model to its latest release. Backward

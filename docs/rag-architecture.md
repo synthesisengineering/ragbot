@@ -68,6 +68,10 @@ Unlike simple RAG implementations that follow a basic "embed query â†’ search â†
 - Uses `engines.yaml` tiers (bulk, routine, judgment; plus the flagship selector)
 - Automatically selects fast model from same provider as user's model
 - Ensures consistent API key usage across pipeline
+- Calls the fast model through the configured LLM backend at the least reasoning
+  it allows: thinking off for local models, the lowest declared effort for cloud
+  models. These calls want a few lines of JSON or prose, and reasoning would only
+  spend their output budget
 
 ### Impact
 - **+21 NDCG points** from query rewriting (Microsoft benchmarks)
@@ -97,11 +101,18 @@ Unlike simple RAG implementations that follow a basic "embed query â†’ search â†
    - Merges ranked lists from vector and BM25 search
    - Formula: `score = Î£(1 / (k + rank))` for each list
    - Balances semantic and lexical relevance
+   - Applied whenever either list has hits, so every hybrid result carries an
+     RRF score and results from several searches sort on one scale
 
 4. **LLM-Based Reranking**
-   - Scores each result's relevance to query (0-10 scale)
+   - Scores the top 20 results' relevance to the query (0-10 scale)
    - Uses provider's fast model for efficiency
-   - Combined score: 30% original + 70% LLM judgment
+   - Combined score (0-1): 30% retrieval strength + 70% LLM judgment.
+     Retrieval strength is the RRF score divided by the largest one, because
+     raw scores differ in scale by source (cosine similarity, full-text rank)
+   - Results past the top 20 follow in retrieval order; if the model gives no
+     usable reply, the retrieval order stands
+   - The context labels each chunk's relevance with the combined score
 
 ### Impact
 - **67% fewer retrieval failures** from hybrid search (Anthropic benchmarks)

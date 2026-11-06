@@ -33,6 +33,32 @@ def resolve_effort(info: dict[str, Any], requested: str | None) -> str:
     return effort
 
 
+# Reasoning efforts from least to most, across the providers' vocabularies.
+EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+
+
+def least_reasoning_effort(info: dict[str, Any]) -> str | None:
+    """The least reasoning a catalog entry allows, for short helper calls.
+
+    Retrieval helpers (query planning, reranking, HyDE) ask for a few lines of
+    JSON or prose, so reasoning only spends their output budget and time.
+
+    * A strict (cloud) contract gives its lowest declared mode.
+    * A local model with hybrid thinking gives ``none``, which switches
+      thinking off (LiteLLM sends Ollama ``think: false``).
+    * An entry without thinking support gives None: send no parameter.
+    """
+    meta = info.get("thinking") or {}
+    if not meta or meta.get("supported") is False:
+        return None
+    if not meta.get("strict"):
+        return "none"
+    unknown = [mode for mode in meta.get("modes", []) if mode not in EFFORT_ORDER]
+    if unknown or not meta.get("modes"):
+        raise ValueError(f"Cannot order reasoning modes {meta.get('modes')!r} for {info.get('id')}")
+    return min(meta["modes"], key=EFFORT_ORDER.index)
+
+
 def apply_request_contract(request, kwargs: dict[str, Any], *, native_model: bool = False) -> dict[str, Any]:
     info, contract = model_contract(request.model)
     if not contract:

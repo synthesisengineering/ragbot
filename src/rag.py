@@ -567,6 +567,10 @@ def reciprocal_rank_fusion(
     return sorted_results
 
 
+# Weight of retrieval strength against the LLM's judgment in reranking.
+RERANK_RETRIEVAL_WEIGHT = 0.3
+
+
 def rerank_with_llm(
     query: str,
     results: List[Dict],
@@ -576,8 +580,16 @@ def rerank_with_llm(
 ) -> List[Dict]:
     """Rerank search results using an LLM for relevance scoring.
 
-    Uses the provider's fast model to score each result's relevance
-    to the query, then reorders by LLM score.
+    Uses the provider's fast model to score the first ``top_k`` results'
+    relevance to the query, then orders them by a mix of that score and
+    their retrieval strength.
+
+    Retrieval scores are not on one scale: vector hits carry cosine
+    similarity, keyword hits carry full-text rank, and fused hits carry an
+    RRF score. Mixing a raw score with the LLM's 0-10 judgment let a keyword
+    hit the LLM scored 0 outrank the chunk it scored 10. So the retrieval
+    signal (the key the pipeline sorts by: ``rrf_score``, else ``score``) is
+    first scaled to 0-1 across all results.
 
     Args:
         query: Original user query
@@ -587,10 +599,13 @@ def rerank_with_llm(
         top_k: Number of top results to rerank (default: 20)
 
     Returns:
-        Reranked results with 'llm_score' added
+        The results in final order. Every result carries ``combined_score``
+        (0-1) and ``llm_score`` (None where the LLM did not score it).
     """
     if not results:
         return results
+
+    strength = _retrieval_strength(results)
 
     # Only rerank top_k results to control costs/latency
     to_rerank = results[:top_k]
@@ -613,51 +628,62 @@ def rerank_with_llm(
     )
 
     response = _call_fast_llm(prompt, user_model, workspace)
+    scores = _parse_reranker_scores(response) if response else None
 
-    if response:
-        try:
-            # Parse JSON response
-            json_str = response
-            if '```json' in json_str:
-                json_str = json_str.split('```json')[1].split('```')[0]
-            elif '```' in json_str:
-                json_str = json_str.split('```')[1].split('```')[0]
-
-            result_data = json.loads(json_str.strip())
-            scores = result_data.get('scores', [])
-
-            # Apply LLM scores
-            for i, result in enumerate(to_rerank):
-                if i < len(scores):
-                    llm_score = float(scores[i])
-                    result['llm_score'] = llm_score
-                    # Combine with original score (weighted average)
-                    original_score = result.get('score', 0.5)
-                    result['combined_score'] = 0.3 * original_score + 0.7 * (llm_score / 10)
-                else:
-                    result['llm_score'] = 5.0  # Default middle score
-                    result['combined_score'] = result.get('score', 0.5)
-
-            # Sort by combined score
-            to_rerank.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
-
-            logger.info(f"LLM reranking complete: top scores = {[r.get('llm_score', 0) for r in to_rerank[:5]]}")
-
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.warning(f"Failed to parse reranker response: {e}")
-            # Fall back to original order
-            for result in to_rerank:
-                result['llm_score'] = None
-                result['combined_score'] = result.get('score', 0.5)
-    else:
-        # LLM unavailable - use original scores
-        logger.info("LLM reranking skipped (no fast model available)")
-        for result in to_rerank:
+    if scores is None:
+        if not response:
+            # _call_fast_llm logged why there was no reply
+            logger.info("LLM reranking skipped: the fast model gave no reply; keeping retrieval order")
+        for result, s in zip(results, strength):
             result['llm_score'] = None
-            result['combined_score'] = result.get('score', 0.5)
+            result['combined_score'] = s
+        return results
 
-    # Combine reranked and rest
+    for i, result in enumerate(to_rerank):
+        # A reply with too few scores leaves the tail at the middle score.
+        result['llm_score'] = scores[i] if i < len(scores) else 5.0
+        result['combined_score'] = (
+            RERANK_RETRIEVAL_WEIGHT * strength[i]
+            + (1 - RERANK_RETRIEVAL_WEIGHT) * result['llm_score'] / 10
+        )
+    for result, s in zip(rest, strength[len(to_rerank):]):
+        # Unscored results follow the scored ones, still in retrieval order.
+        result['llm_score'] = None
+        result['combined_score'] = RERANK_RETRIEVAL_WEIGHT * s
+
+    to_rerank.sort(key=lambda x: x['combined_score'], reverse=True)
+    logger.info(f"LLM reranking complete: top scores = {[r['llm_score'] for r in to_rerank[:5]]}")
     return to_rerank + rest
+
+
+def _retrieval_strength(results: List[Dict]) -> List[float]:
+    """Each result's retrieval signal, scaled to 0-1 across ``results``.
+
+    The signal is the key the pipeline orders results by (``rrf_score``,
+    else ``score``). Dividing by the largest keeps that order and the
+    proportions between scores, so near-equal results stay near-equal and
+    the LLM's judgment decides between them.
+    """
+    keys = [max(float(r.get('rrf_score', r.get('score', 0.0)) or 0.0), 0.0) for r in results]
+    high = max(keys)
+    if high == 0:
+        return [1.0] * len(keys)
+    return [k / high for k in keys]
+
+
+def _parse_reranker_scores(response: str) -> Optional[List[float]]:
+    """The scores from a reranker reply, clamped to 0-10, or None when the
+    reply is unusable."""
+    json_str = response
+    if '```json' in json_str:
+        json_str = json_str.split('```json')[1].split('```')[0]
+    elif '```' in json_str:
+        json_str = json_str.split('```')[1].split('```')[0]
+    try:
+        return [min(max(float(s), 0.0), 10.0) for s in json.loads(json_str.strip()).get('scores', [])]
+    except (json.JSONDecodeError, ValueError, TypeError, AttributeError) as e:
+        logger.warning(f"Failed to parse reranker response: {e}")
+        return None
 
 
 def hybrid_search(
@@ -697,105 +723,107 @@ def hybrid_search(
     # For efficiency, we'll use the vector search results as the corpus
     # (This is a practical trade-off: full BM25 would require loading all docs)
 
-    if not VECTOR_STORE_AVAILABLE:
-        return vector_results
-    vs = get_vector_store()
-    if vs is None:
-        return vector_results
+    bm25_results: List[Dict] = []
+    vs = get_vector_store() if VECTOR_STORE_AVAILABLE else None
+    if vs is not None:
+        try:
+            bm25_results = _keyword_search_results(vs, workspace_name, query, limit, content_type)
+        except Exception as e:
+            logger.error(f"Keyword search failed; using vector results alone: {e}")
 
-    try:
-        # Try native FTS first (pgvector). If the backend supports it, this
-        # is faster, more accurate, and avoids loading the corpus into memory.
-        bm25_results = []
-        native_hits = vs.keyword_search(
-            workspace_name,
-            query,
-            limit=limit,
-            content_type=content_type,
+    logger.info(f"Hybrid search: {len(vector_results)} vector, {len(bm25_results)} BM25")
+
+    # Step 3: Merge results
+    return _merge_ranked_lists(vector_results, bm25_results, limit, use_rrf)
+
+
+def _keyword_search_results(vs, workspace_name: str, query: str, limit: int,
+                            content_type: Optional[str]) -> List[Dict]:
+    """Keyword hits for ``query``, best first."""
+    # Try native FTS first (pgvector). If the backend supports it, this
+    # is faster, more accurate, and avoids loading the corpus into memory.
+    native_hits = vs.keyword_search(
+        workspace_name,
+        query,
+        limit=limit,
+        content_type=content_type,
+    )
+    if native_hits:
+        return [
+            {
+                'text': h.text,
+                'score': h.score,
+                'metadata': dict(h.metadata),
+            }
+            for h in native_hits
+        ]
+
+    # Fallback: in-process BM25 over scrolled chunks. Reached only
+    # when a backend declines to implement keyword_search natively
+    # — pgvector always returns native FTS hits, so the fallback
+    # never fires on Ragbot's bundled stack. Kept for backends
+    # plugged in by other synthesis-engine consumers.
+    # Limit to 500 to bound memory.
+    scrolled = vs.scroll_documents(
+        workspace_name,
+        limit=500,
+        content_type=content_type,
+    )
+    bm25_docs = [
+        {'text': h.text, 'metadata': dict(h.metadata)}
+        for h in scrolled or []
+    ]
+    if not bm25_docs:
+        return []
+
+    bm25_index = BM25Index()
+    bm25_index.add_documents(bm25_docs)
+    return [
+        {
+            'text': doc.get('text', ''),
+            'score': score,
+            'metadata': doc.get('metadata', {}),
+        }
+        for doc, score in bm25_index.search(query, limit=limit)
+    ]
+
+
+def _merge_ranked_lists(vector_results: List[Dict], bm25_results: List[Dict],
+                        limit: int, use_rrf: bool) -> List[Dict]:
+    """Merge vector and keyword hits.
+
+    With ``use_rrf``, every result carries an ``rrf_score``, including when
+    only one list has hits: the pipeline sorts results from many searches
+    together by that key, and a raw score (cosine similarity or full-text
+    rank) in the same sort would outrank any RRF score.
+    """
+    ranked_lists = [lst for lst in (vector_results, bm25_results) if lst]
+    if use_rrf:
+        merged = reciprocal_rank_fusion(
+            [[(r, r['score']) for r in lst] for lst in ranked_lists]
         )
-        if native_hits:
-            bm25_results = [
-                {
-                    'text': h.text,
-                    'score': h.score,
-                    'metadata': dict(h.metadata),
-                }
-                for h in native_hits
-            ]
-        else:
-            # Fallback: in-process BM25 over scrolled chunks. Reached only
-            # when a backend declines to implement keyword_search natively
-            # — pgvector always returns native FTS hits, so the fallback
-            # never fires on Ragbot's bundled stack. Kept for backends
-            # plugged in by other synthesis-engine consumers.
-            # Limit to 500 to bound memory.
-            scrolled = vs.scroll_documents(
-                workspace_name,
-                limit=500,
-                content_type=content_type,
-            )
-            if not scrolled:
-                return vector_results
+        final_results = []
+        for doc, rrf_score in merged[:limit]:
+            result = doc.copy()
+            result['rrf_score'] = rrf_score
+            # Preserve original score if present
+            if 'score' not in result:
+                result['score'] = rrf_score
+            final_results.append(result)
+        return final_results
 
-            bm25_docs = [
-                {'text': h.text, 'metadata': dict(h.metadata)}
-                for h in scrolled
-            ]
-            if not bm25_docs:
-                return vector_results
+    # Simple merge (concatenate and dedupe)
+    seen = set()
+    merged = []
+    for r in vector_results + bm25_results:
+        key = (r['metadata'].get('filename', ''), r['metadata'].get('char_start', 0))
+        if key not in seen:
+            seen.add(key)
+            merged.append(r)
 
-            bm25_index = BM25Index()
-            bm25_index.add_documents(bm25_docs)
-            bm25_raw = bm25_index.search(query, limit=limit)
-            bm25_results = [
-                {
-                    'text': doc.get('text', ''),
-                    'score': score,
-                    'metadata': doc.get('metadata', {}),
-                }
-                for doc, score in bm25_raw
-            ]
-
-        logger.info(f"Hybrid search: {len(vector_results)} vector, {len(bm25_results)} BM25")
-
-        # Step 3: Merge results
-        if use_rrf and vector_results and bm25_results:
-            # Prepare for RRF
-            vector_list = [(r, r['score']) for r in vector_results]
-            bm25_list = [(r, r['score']) for r in bm25_results]
-
-            # Apply RRF
-            merged = reciprocal_rank_fusion([vector_list, bm25_list])
-
-            # Convert back to standard format
-            final_results = []
-            for doc, rrf_score in merged[:limit]:
-                result = doc.copy()
-                result['rrf_score'] = rrf_score
-                # Preserve original score if present
-                if 'score' not in result:
-                    result['score'] = rrf_score
-                final_results.append(result)
-
-            return final_results
-        else:
-            # Simple merge (concatenate and dedupe)
-            seen = set()
-            merged = []
-
-            for r in vector_results + bm25_results:
-                key = (r['metadata'].get('filename', ''), r['metadata'].get('char_start', 0))
-                if key not in seen:
-                    seen.add(key)
-                    merged.append(r)
-
-            # Sort by score
-            merged.sort(key=lambda x: x['score'], reverse=True)
-            return merged[:limit]
-
-    except Exception as e:
-        logger.error(f"Hybrid search failed: {e}")
-        return vector_results
+    # Sort by score
+    merged.sort(key=lambda x: x['score'], reverse=True)
+    return merged[:limit]
 
 
 def _get_fast_model(user_model: Optional[str] = None) -> Optional[str]:
@@ -836,7 +864,10 @@ def _call_fast_llm(prompt: str, user_model: Optional[str] = None,
     """Call the fast LLM (bulk tier) for auxiliary operations.
 
     Uses the same provider as the user's model to ensure consistent
-    API key usage and billing. Falls back gracefully if unavailable.
+    API key usage and billing. The call goes through the configured LLM
+    backend, which applies each provider's request rules, at the least
+    reasoning the model allows: these helpers want a few lines of JSON or
+    prose, and reasoning would only spend the output budget.
 
     Args:
         prompt: The prompt to send
@@ -844,57 +875,31 @@ def _call_fast_llm(prompt: str, user_model: Optional[str] = None,
         workspace: Workspace name for API key resolution
 
     Returns:
-        LLM response text, or None on failure
+        LLM response text, or None on failure (the cause is logged)
     """
     fast_model = _get_fast_model(user_model)
     if not fast_model:
         logger.warning("No fast model available for auxiliary LLM calls")
         return None
 
+    from synthesis_engine.config import DEFAULT_MAX_TOKENS, get_model_info, get_provider_for_model
+    from synthesis_engine.keystore import get_api_key
+    from synthesis_engine.llm import LLMRequest, get_llm_backend
+    from synthesis_engine.llm.model_parameters import least_reasoning_effort
+
     try:
-        import litellm
-
-        # Get API key for the provider
-        try:
-            from synthesis_engine.config import get_provider_for_model
-            from synthesis_engine.keystore import get_api_key
-        except ImportError:
-            from .synthesis_engine.config import get_provider_for_model
-            from .synthesis_engine.keystore import get_api_key
-
-        provider = get_provider_for_model(fast_model)
-
-        # Get API key name from engines.yaml
-        try:
-            from synthesis_engine.config import get_provider_config
-        except ImportError:
-            from .synthesis_engine.config import get_provider_config
-
-        provider_config = get_provider_config(provider)
-        if provider_config:
-            api_key_name = provider_config.get('api_key_name')
-            api_key = get_api_key(api_key_name, workspace)
-            if api_key:
-                # Set API key for litellm
-                if provider == 'anthropic':
-                    litellm.api_key = api_key
-                elif provider == 'openai':
-                    os.environ['OPENAI_API_KEY'] = api_key
-                elif provider == 'google':
-                    os.environ['GOOGLE_API_KEY'] = api_key
-
-        # Make the LLM call with minimal tokens (fast operation)
-        response = litellm.completion(
+        info = get_model_info(fast_model) or {}
+        request = LLMRequest(
             model=fast_model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,  # Planner responses are short
-            temperature=0.3,  # Low temperature for consistent planning
+            temperature=0.3,  # Consistent JSON; the backend drops it where unsupported
+            max_tokens=info.get("default_max_tokens", DEFAULT_MAX_TOKENS),
+            api_key=get_api_key(get_provider_for_model(fast_model), workspace),
+            reasoning_effort=least_reasoning_effort(info),
         )
-
-        return response.choices[0].message.content.strip()
-
+        return get_llm_backend().complete(request).text.strip()
     except Exception as e:
-        logger.warning(f"Fast LLM call failed: {e}")
+        logger.warning(f"Fast LLM call to {fast_model} failed: {e}")
         return None
 
 
@@ -1999,8 +2004,9 @@ def get_relevant_context(workspace_name, query: str,
 
             if chunk_key not in seen_chunks:
                 seen_chunks.add(chunk_key)
-                # Slightly boost HyDE results as they bridge semantic gap
-                result['score'] *= 1.1
+                # Slightly boost HyDE results as they bridge semantic gap.
+                # Boost the key the results are sorted by below.
+                result['rrf_score' if 'rrf_score' in result else 'score'] *= 1.1
                 all_results.append(result)
 
     # Sort all results by score
@@ -2014,9 +2020,7 @@ def get_relevant_context(workspace_name, query: str,
             user_model=user_model,
             workspace=workspace_name,
             top_k=20  # Only rerank top 20 for efficiency
-        )
-        # Re-sort by combined score after reranking
-        all_results.sort(key=lambda x: x.get('combined_score', x.get('score', 0)), reverse=True)
+        )  # Returned in final order; a re-sort here would undo it
 
     if not all_results:
         return ""
@@ -2041,7 +2045,9 @@ def get_relevant_context(workspace_name, query: str,
 
         source = result['metadata'].get('filename', 'unknown')
         content_type = result['metadata'].get('content_type', 'content')
-        score = result['score']
+        # Raw scores differ in scale by source (cosine, full-text rank, RRF);
+        # after reranking, combined_score is the 0-1 measure the order uses.
+        score = result.get('combined_score', result['score'])
         title = result['metadata'].get('title', '')
 
         # Track which files we've included

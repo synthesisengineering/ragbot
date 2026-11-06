@@ -335,8 +335,12 @@ engines:
         local_inference:
           mlx_supported: true
           ollama_tag: gemma4:31b
+        thinking:
+          supported: true
+          mode: hybrid
+          modes: [thinking, instruct]
         backend_notes:
-          ollama: "30.7B dense. 19-20GB at Q4; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+          ollama: "30.7B dense. 19-20GB at Q4; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants. Thinking on by default."
       # Qwen3.8 supersedes Qwen3.6; its card benchmarks against Qwen3.6-27B.
       - name: qwen3.8:27b
         display_name: Qwen3.8 27B
@@ -370,8 +374,12 @@ engines:
         local_inference:
           mlx_supported: true
           ollama_tag: gemma4:26b
+        thinking:
+          supported: true
+          mode: hybrid
+          modes: [thinking, instruct]
         backend_notes:
-          ollama: "25.2B total / 3.8B active MoE. 16-19GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+          ollama: "25.2B total / 3.8B active MoE. 16-19GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants. Thinking on by default."
       - name: gemma4:12b
         display_name: Gemma 4 12B
         tier: bulk
@@ -385,8 +393,12 @@ engines:
         local_inference:
           mlx_supported: true
           ollama_tag: gemma4:12b
+        thinking:
+          supported: true
+          mode: hybrid
+          modes: [thinking, instruct]
         backend_notes:
-          ollama: "11.95B dense (Gemma 4 12B Unified, 2026-06-03). 7.7-8.0GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+          ollama: "11.95B dense (Gemma 4 12B Unified, 2026-06-03). 7.7-8.0GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants. Thinking on by default."
       - name: gemma4:e4b
         display_name: Gemma 4 E4B
         tier: bulk
@@ -400,8 +412,12 @@ engines:
         local_inference:
           mlx_supported: true
           ollama_tag: gemma4:e4b
+        thinking:
+          supported: true
+          mode: hybrid
+          modes: [thinking, instruct]
         backend_notes:
-          ollama: "4.5B effective (8B with embeddings). 6.6-9.5GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants."
+          ollama: "4.5B effective (8B with embeddings). 6.6-9.5GB; -mlx, -mlx-bf16, -nvfp4 and -mxfp8 variants. Thinking off by default."
       - name: qwen3.8-flash-next:125b-a6b-q4_K_M
         display_name: Qwen3.8 Flash-Next 125B-A6B (preview)
         tier: judgment

@@ -128,11 +128,11 @@ that returns the same JSON shape without invoking an LLM.
 
 ## Schema
 
-Migration: `vectorstore/migrations/0002_memory_entities.sql`.
+Migrations: `vectorstore/migrations/0002_memory_entities.sql`; `0004_embedding_dimensions.sql` moved the embedding column to 1,024 dimensions.
 
 ```
 entities         (id, workspace, type, name, attributes jsonb,
-                  embedding vector(384) nullable, created_at, updated_at)
+                  embedding vector(1024) nullable, created_at, updated_at)
                  UNIQUE (workspace, type, name)
                  HNSW on embedding WHERE embedding IS NOT NULL
                  GIN on attributes

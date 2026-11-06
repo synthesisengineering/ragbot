@@ -122,8 +122,9 @@ class Entity(BaseModel):
     embedding: Optional[List[float]] = Field(
         default=None,
         description=(
-            "Optional 384-dim embedding of the entity's effective text "
-            "(name + key attributes). Omit when entities aren't embedded."
+            "Optional embedding of the entity's effective text (name + key "
+            "attributes), at the dimension engines.yaml's embedding block "
+            "declares. Omit when entities aren't embedded."
         ),
     )
     created_at: Optional[datetime] = None

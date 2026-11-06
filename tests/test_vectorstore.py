@@ -43,12 +43,18 @@ from synthesis_engine.vectorstore import (  # noqa: E402
 
 class TestPointAndSearchHit:
     def test_point_defaults_are_safe(self):
-        p = Point(chunk_uid="abc", vector=[0.0] * 4, text="hello")
+        p = Point(chunk_uid="abc", vector=[0.0] * 4, text="hello", embedding_model="m")
         assert p.chunk_uid == "abc"
         assert p.vector == [0.0] * 4
         assert p.text == "hello"
         assert p.metadata == {}
-        assert p.embedding_model == "all-MiniLM-L6-v2"
+        assert p.embedding_model == "m"
+
+    def test_point_requires_the_embedding_model(self):
+        # No default: a default would label vectors with a model that may not
+        # have produced them, which defeats drift detection.
+        with pytest.raises(TypeError):
+            Point(chunk_uid="abc", vector=[0.0] * 4, text="hello")
 
     def test_search_hit_score_coerces_to_float(self):
         h = SearchHit(text="hi", score=1)
@@ -148,13 +154,18 @@ class TestPgvectorBackendLive:
         assert vs.backend_name == "pgvector"
 
         ws = f"ws_test_{uuid.uuid4().hex[:8]}"
-        # The schema fixes the embedding dimension at 384 (matches all-MiniLM-L6-v2).
-        # Build deterministic 384-dim vectors so the test exercises the real schema.
-        vec_alpha = [1.0] + [0.0] * 383
-        vec_beta = [0.0, 1.0] + [0.0] * 382
+        # Deterministic vectors at the dimension engines.yaml declares, so the
+        # test exercises the real schema.
+        from synthesis_engine.config import get_embedding_config
+
+        dimension = get_embedding_config().dimensions
+        assert vs.schema_dimension() == dimension
+        vec_alpha = [1.0] + [0.0] * (dimension - 1)
+        vec_beta = [0.0, 1.0] + [0.0] * (dimension - 2)
 
         try:
-            assert vs.init_collection(ws, vector_size=384)
+            assert vs.init_collection(ws, vector_size=dimension)
+            assert not vs.init_collection(ws, vector_size=dimension + 1)
             written = vs.upsert_points(
                 ws,
                 [
@@ -162,12 +173,14 @@ class TestPgvectorBackendLive:
                         chunk_uid="a",
                         vector=vec_alpha,
                         text="alpha document",
+                        embedding_model="test-model",
                         source_path="/tmp/a",
                     ),
                     Point(
                         chunk_uid="b",
                         vector=vec_beta,
                         text="beta document",
+                        embedding_model="test-model",
                         source_path="/tmp/b",
                     ),
                 ],

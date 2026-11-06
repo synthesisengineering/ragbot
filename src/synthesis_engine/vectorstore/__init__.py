@@ -72,6 +72,7 @@ class Point:
     chunk_uid: str                       # deterministic chunk identifier
     vector: List[float]                  # embedding (length matches embedding_model)
     text: str                            # original chunk text (NOT the embedded form)
+    embedding_model: str                 # model that produced ``vector`` (engines.yaml)
     chunk_index: int = 0
     char_start: Optional[int] = None
     char_end: Optional[int] = None
@@ -79,7 +80,6 @@ class Point:
     title: Optional[str] = None
     content_type: Optional[str] = None
     source_path: Optional[str] = None
-    embedding_model: str = "all-MiniLM-L6-v2"
     # Retrieval tier — see CONTENT_TIERS above. Default matches the only
     # tier that existed before this field was added.
     content_tier: str = "topic-specific"
@@ -115,8 +115,11 @@ class VectorStore(ABC):
     backend_name: str = "abstract"
 
     @abstractmethod
-    def init_collection(self, workspace: str, vector_size: int = 384) -> bool:
-        """Ensure the workspace's storage exists. Idempotent."""
+    def init_collection(self, workspace: str, vector_size: int) -> bool:
+        """Ensure the workspace's storage exists and holds ``vector_size``-
+        dimension vectors. Idempotent. Returns False when the storage holds
+        a different dimension, so a caller never indexes vectors from a
+        model the store was not built for."""
 
     @abstractmethod
     def upsert_points(self, workspace: str, points: List[Point]) -> int:

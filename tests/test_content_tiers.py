@@ -95,6 +95,9 @@ def _backend_with_fake_cursor(fetchall_result=None, fetchone_result=None):
     """Build a PgvectorBackend whose _connection() yields a fake cursor
     that records every execute() call, without touching a real DB."""
     backend = PgvectorBackend(dsn="postgresql://fake/fake")
+    # The schema dimension is read from the catalog on first use; these tests
+    # use 4-dimension vectors, so fix it rather than script a catalog row.
+    backend._schema_dimension = 4
     cursor = FakeCursor(fetchall_result=fetchall_result, fetchone_result=fetchone_result)
     conn = FakeConnection(cursor)
     backend._connection = MagicMock(return_value=conn)  # type: ignore[method-assign]
@@ -123,7 +126,7 @@ class TestResolveTiers:
 
 class TestPointDefaults:
     def test_point_default_tier_is_topic_specific(self):
-        p = Point(chunk_uid="x", vector=[0.0] * 4, text="hi")
+        p = Point(chunk_uid="x", vector=[0.0] * 4, text="hi", embedding_model="test-model")
         assert p.content_tier == "topic-specific"
         assert p.content_hash is None
         assert p.embedding_model_version is None
@@ -137,7 +140,7 @@ class TestPointDefaults:
 class TestSearchTierFiltering:
     def test_search_sets_workspace_context_before_query(self):
         backend, cursor = _backend_with_fake_cursor(fetchall_result=[])
-        backend.search("ws-a", [0.1, 0.2], limit=5)
+        backend.search("ws-a", [0.1, 0.2, 0.3, 0.4], limit=5)
 
         assert len(cursor.executed) == 2
         set_config_sql, set_config_params = cursor.executed[0]
@@ -146,7 +149,7 @@ class TestSearchTierFiltering:
 
     def test_search_defaults_to_safe_tiers(self):
         backend, cursor = _backend_with_fake_cursor(fetchall_result=[])
-        backend.search("ws-a", [0.1, 0.2], limit=5)
+        backend.search("ws-a", [0.1, 0.2, 0.3, 0.4], limit=5)
 
         query_sql, query_params = cursor.executed[1]
         assert "content_tier = ANY(%s)" in query_sql
@@ -156,7 +159,7 @@ class TestSearchTierFiltering:
 
     def test_search_honors_explicit_archive_tier(self):
         backend, cursor = _backend_with_fake_cursor(fetchall_result=[])
-        backend.search("ws-a", [0.1, 0.2], limit=5, content_tiers=["archive-only"])
+        backend.search("ws-a", [0.1, 0.2, 0.3, 0.4], limit=5, content_tiers=["archive-only"])
 
         _, query_params = cursor.executed[1]
         tier_arg = [p for p in query_params if isinstance(p, list) and p and isinstance(p[0], str)]
@@ -241,7 +244,7 @@ class TestUpsertPointsWritesTierColumns:
     def test_chunk_insert_includes_tier_hash_and_version(self):
         backend, cursor = _backend_with_fake_cursor(fetchone_result=(1,))
         point = Point(
-            chunk_uid="c1", vector=[0.0] * 4, text="hi",
+            chunk_uid="c1", vector=[0.0] * 4, text="hi", embedding_model="test-model",
             source_path="/tmp/a.md", content_tier="archive-only",
             content_hash="deadbeef", embedding_model_version="model@1.2.3",
         )
@@ -281,13 +284,15 @@ class TestRagIndexContentTierThreading:
         fake_vs = MagicMock()
         fake_vs.upsert_points.return_value = 1
         fake_model = MagicMock()
-        fake_model.encode.return_value.tolist.return_value = [0.0] * 4
+        fake_model.get_embedding_dimension.return_value = 4
+        fake_vector = MagicMock()
+        fake_vector.tolist.return_value = [0.0] * 4
+        fake_model.encode_document.return_value = [fake_vector]
 
         with patch.object(rag, '_load_chunking', return_value=True), \
              patch.object(rag, 'VECTOR_STORE_AVAILABLE', True), \
              patch.object(rag, 'get_vector_store', return_value=fake_vs), \
              patch.object(rag, '_get_embedding_model', return_value=fake_model), \
-             patch.object(rag, '_get_embedding_dimension', return_value=4), \
              patch.object(rag, 'init_collection', return_value=True), \
              patch.object(rag, 'ChunkConfig', MagicMock()), \
              patch.object(rag, 'chunk_files', return_value=[fake_chunk]):
@@ -316,7 +321,7 @@ class TestSearchArchiveOnlyReachesArchiveTier:
         fake_vs.search.return_value = []
         fake_vs.keyword_search.return_value = []
         fake_model = MagicMock()
-        fake_model.encode.return_value.tolist.return_value = [0.0] * 4
+        fake_model.encode_query.return_value.tolist.return_value = [0.0] * 4
 
         with patch.object(rag, 'VECTOR_STORE_AVAILABLE', True), \
              patch.object(rag, 'get_vector_store', return_value=fake_vs), \
@@ -363,6 +368,7 @@ class TestRLSLive:
         reset_vector_store()
 
     def test_forgotten_where_clause_still_isolates_workspaces(self, monkeypatch):
+        from synthesis_engine.config import get_embedding_config
         from synthesis_engine.vectorstore import get_vector_store, Point
 
         monkeypatch.setenv("RAGBOT_DATABASE_URL", os.environ["RAGBOT_PGVECTOR_TEST_URL"])
@@ -371,18 +377,19 @@ class TestRLSLive:
 
         ws_a = f"rls_a_{uuid.uuid4().hex[:8]}"
         ws_b = f"rls_b_{uuid.uuid4().hex[:8]}"
-        vec = [1.0] + [0.0] * 383
+        dimension = get_embedding_config().dimensions
+        vec = [1.0] + [0.0] * (dimension - 1)
 
         try:
-            vs.init_collection(ws_a, vector_size=384)
-            vs.init_collection(ws_b, vector_size=384)
+            assert vs.init_collection(ws_a, vector_size=dimension)
+            assert vs.init_collection(ws_b, vector_size=dimension)
             vs.upsert_points(ws_a, [Point(
                 chunk_uid="a1", vector=vec, text="workspace A secret",
-                source_path="/tmp/a1",
+                embedding_model="test-model", source_path="/tmp/a1",
             )])
             vs.upsert_points(ws_b, [Point(
                 chunk_uid="b1", vector=vec, text="workspace B secret",
-                source_path="/tmp/b1",
+                embedding_model="test-model", source_path="/tmp/b1",
             )])
 
             # Raw connection, scoped to ws_a, running a query that

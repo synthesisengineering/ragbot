@@ -95,26 +95,3 @@ class TestBug5TransformersTokenizersCompat:
         # The actual return depends on RAGBOT_DATABASE_URL etc., but the
         # function must not raise.
         is_rag_available()
-
-
-# ---------------------------------------------------------------------------
-# Extra: regression test for the get_embedding_dimension rename. The old
-# get_sentence_embedding_dimension method emits a FutureWarning in
-# sentence-transformers 5.x. Our helper prefers the new name.
-# ---------------------------------------------------------------------------
-
-
-class TestEmbeddingDimensionHelper:
-    def test_helper_prefers_new_method(self):
-        from rag import _get_embedding_dimension
-
-        class FakeModelNew:
-            def get_embedding_dimension(self):
-                return 384
-
-        class FakeModelOld:
-            def get_sentence_embedding_dimension(self):
-                return 384
-
-        assert _get_embedding_dimension(FakeModelNew()) == 384
-        assert _get_embedding_dimension(FakeModelOld()) == 384

@@ -111,6 +111,11 @@ services:
       # Persistent session storage
       - ragbot-sessions:/root/.local/share/ragbot/sessions
 
+      # Hugging Face model cache. The embedding model (engines.yaml
+      # `embedding:`) is about 1.2 GB; without a volume, every rebuild or
+      # recreated container downloads it again before RAG can answer.
+      - ragbot-hf-cache:/root/.cache/huggingface
+
       # Mount the synthesis-engineering shared config home.
       # Contains: keys.yaml (API keys, read at request time), ragbot.yaml
       # (user prefs incl. default_workspace, pinned_models, recent_models),
@@ -173,6 +178,8 @@ volumes:
   ragbot-postgres-18-data:
     driver: local
   ragbot-web-node-modules:
+    driver: local
+  ragbot-hf-cache:
     driver: local
 
 networks:

@@ -82,7 +82,10 @@ Unlike simple RAG implementations that follow a basic "embed query â†’ search â†
 
 1. **Vector Search**
    - Semantic similarity using sentence-transformers
-   - `all-MiniLM-L6-v2` embeddings (384 dimensions)
+   - `microsoft/harrier-oss-v1-0.6b` embeddings (1,024 dimensions), declared in
+     `engines.yaml`'s `embedding:` block with a pinned revision
+   - Queries are encoded with the model's `web_search_query` instruction;
+     documents are encoded without one
    - Cosine distance for matching
 
 2. **BM25 Keyword Search**

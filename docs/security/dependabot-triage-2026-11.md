@@ -15,7 +15,7 @@ source of truth for the decisions below.
 | Closed without merge | 1 (#62) |
 | Web advisories (`npm audit`) on `main` before the pass | 22: 1 critical, 6 high, 15 moderate |
 | Web advisories after this pass | 0 |
-| Python advisories (`pip-audit`) after this pass | 13, all `filelock`, blocked upstream (see below) |
+| Python advisories (`pip-audit`) after this pass | 0 (13 `filelock` CVEs cleared by the LiteLLM 1.109.0rc1 floor; see below) |
 
 Both ecosystems were at their `open-pull-requests-limit` of 10 when the pass
 began.
@@ -125,7 +125,7 @@ The lockfile drops `@rolldown/binding-wasm32-wasi` and its `@emnapi` and
 `@napi-rs` dependencies. That is upstream: `rolldown` 1.2.16 no longer lists
 the wasm32 binding. It is not the macOS lockfile omission recorded in 2026-09.
 
-## Open: `filelock` (Python), blocked by LiteLLM's cap
+## Resolved: `filelock` (Python), through the LiteLLM 1.109.0rc1 floor
 
 `pip-audit` reports 13 CVEs against `filelock` 3.32.7, fixed only in 4.x
 (4.0.9 for one, 4.2.1 for the rest). `filelock` is transitive, through `torch`,
@@ -146,14 +146,26 @@ requirements as unsatisfiable). LiteLLM 1.109.0rc1, a pre-release published
 2026-11-04, declares `filelock<5`. The first stable release carrying that
 change clears the cap.
 
-Two ways to resolve it, neither one a dependency bump:
+**Resolution, same day.** `requirements.txt` now floors LiteLLM at
+`1.109.0rc1` and `filelock` at `4.2.1`. A specifier that names a pre-release
+lets pip install that pre-release, and the final 1.109.0 satisfies the same
+floor, so pip moves to it without another edit once it ships.
 
-1. A stable LiteLLM release that accepts `filelock` 4 (1.109.0rc1 already
-   does). Then add `filelock>=4.2.1` to `requirements.txt` and confirm `pip
-   freeze` moves nothing else backwards.
-2. Make the `direct` backend the default and drop LiteLLM from
-   `requirements.txt`. The 2026-09 triage already named this as a decision to
-   make on its own merits.
+- Fresh Python 3.14 environment: `pip check` is clean and `pip-audit` reports
+  no known vulnerabilities.
+- `pip freeze` against the previous tree changes three packages, all forward:
+  filelock 3.32.7 → 4.2.9, litellm 1.108.1 → 1.109.0rc1 and transformers
+  5.22.1 → 5.22.2. Nothing moves backwards.
+- 1.108.1 was published a day after 1.109.0rc1, so the candidate could have
+  lacked a fix the stable release carries. It does not lack a security fix.
+  1.108.1 is a long-term-support backport of fixes that had already landed on
+  LiteLLM's main branch: router cooldowns, cost maps, proxy spend-log
+  timeouts, stream usage details. The candidate was cut from that branch
+  (BerriAI/litellm#50136 lists the picks).
+
+Making the `direct` backend the default and dropping LiteLLM remains a
+decision to make on its own merits, as the 2026-09 triage noted. It is no
+longer needed to clear these CVEs.
 
 ## Verification commands
 
@@ -339,22 +351,21 @@ dependency tied to an old version.
 
 ### Held back upstream
 
-Seven packages still install below their latest release. In every case the cap
+Six packages still install below their latest release. In every case the cap
 sits in the latest release of the package that depends on them, so nothing in
-Ragbot can lift it:
+Ragbot can lift it. (Seven at first; `filelock` was cleared the same day, see
+above.)
 
 | Package | Installed | Latest | Capped by |
 | --- | --- | --- | --- |
-| filelock | 3.32.7 | 4.2.9 | litellm 1.108.1 (`<4.0`); 13 CVEs, see above |
-| huggingface-hub | 1.33.0 | 2.4.0 | litellm 1.108.1 (`<2.0`) |
-| importlib-metadata | 8.9.0 | 10.1.0 | litellm 1.108.1 (`<9.0`) |
+| huggingface-hub | 1.33.0 | 2.4.0 | litellm 1.109.0rc1 (`<2.0`) |
+| importlib-metadata | 8.9.0 | 10.1.0 | litellm 1.109.0rc1 (`<9.0`) |
 | mpmath | 1.3.0 | 1.4.1 | sympy 1.14.0 (`<1.4`) |
 | python-dateutil | 2.9.0.post0 | 4.0.0 | botocore 1.43.125 (`<3.0.0`) |
 | tenacity | 9.1.4 | 9.2.1 | google-genai 3.0.0 (`<9.2.0`) |
 | uuid-utils | 0.19.0 | 1.2.0 | langsmith 0.14.17 (`<1.0`) |
 
-LiteLLM holds three of the seven. Its 1.109.0rc1 pre-release already lifts the
-filelock cap.
+LiteLLM holds two of the six; its 1.109.0rc1 still caps both.
 
 ### Web packages
 

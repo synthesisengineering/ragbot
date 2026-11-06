@@ -47,7 +47,7 @@ tiktoken>=0.14.0
 
 # --- LangChain (used by some downstream callers) -------------------------
 langchain>=1.4.8
-langchain-anthropic>=1.7.2
+langchain-anthropic>=1.7.9
 langchain-community>=0.4.2
 langchain-google-genai>=4.4.0
 langchain-openai>=1.6.0

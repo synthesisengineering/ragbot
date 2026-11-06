@@ -18,7 +18,20 @@ WORKDIR /app
 FROM base AS dependencies
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# torch comes from PyTorch's CPU index. PyPI's Linux wheels are the CUDA
+# builds, which put 3.3 GB of nvidia-* packages and 0.9 GB of Triton into an
+# image that has no GPU to use them: Docker Desktop on a Mac passes none
+# through, and docker-compose.yml reserves none. On 2026-11-06 that payload
+# made the image 6.8 GB and filled Docker's disk mid-build.
+#
+# --no-deps keeps torch's dependencies off PyTorch's index, whose mirrors of
+# them can lag PyPI: the next install resolves them from PyPI, because pip
+# resolves an installed package's dependencies when a requirement
+# (sentence-transformers) pulls it in. pip check then fails the build if any
+# installed package's requirement is unmet.
+RUN pip install --no-cache-dir --no-deps --index-url https://download.pytorch.org/whl/cpu torch \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip check
 
 FROM base AS final
 

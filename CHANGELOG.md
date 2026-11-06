@@ -31,12 +31,15 @@ compatibility with superseded models, runtimes and SDK versions is not kept.
   - The vector store reads its schema dimension and refuses to index or search with
     vectors of another size; `ragbot db init` and `ragbot db status` report it.
   - The API container keeps downloaded models in a `ragbot-hf-cache` volume.
-  - The model needs about 4.6 GB while loading in float32. Docker Desktop's default 4 GB
+  - The model needs about 4.2 GB while loading in float32. Docker Desktop's default 4 GB
     is not enough; allow it at least 8 GB.
 - **MCP SDK 2.x** (#157). The client primitives, tasks, transports, OAuth callback, proxy
   and Ragbot's MCP server are ported to mcp 2.3.0.
 - **Runtimes and images.**
   - Python 3.14 in CI and the backend image, which no longer installs a compiler.
+  - The backend image installs CPU-only torch from PyTorch's index. PyPI's Linux wheels are
+    the CUDA builds, which added 4.2 GB of GPU libraries to an image with no GPU to use;
+    the build now also runs `pip check`.
   - Node 26 (active LTS) in CI and the web image.
   - PostgreSQL 18 with pgvector 0.8.7 on a new volume;
     `scripts/migrate-postgres-16-to-18.sh` copies an existing database across.

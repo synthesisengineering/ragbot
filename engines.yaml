@@ -496,7 +496,7 @@ default: anthropic
 #   dtype             float32. The weights ship in bfloat16, but CPU inference
 #                     in bfloat16 measured 0.3 chunks/s on Apple Silicon
 #                     against 4.4 in float32 (2026-11-06). The cost is memory:
-#                     the API container peaks at about 4.6 GB while loading.
+#                     the API container peaks at about 4.2 GB while loading.
 #   max_seq_length    Caps tokens per input. Chunks are about 500 tokens; skill
 #                     scripts are embedded whole, and the cap keeps one long
 #                     file from taking the model's full 32K-token window.

@@ -14,26 +14,22 @@
 # range is not the same as being current, and a security floor that never
 # moves is a ceiling.
 anthropic>=1.6.0
-# The `<3` is load-bearing and was learned the hard way on 2026-09-03.
+# openai 3.x is allowed because LiteLLM now accepts it. LiteLLM 1.108.0 is the
+# first release to declare `openai<4.0.0`; every release from 1.90.0 through
+# 1.106.7 caps openai below 3. The LiteLLM floor below is 1.108.0 for that
+# reason, so the two bounds state the pairing directly.
 #
-# LiteLLM caps openai at `<3.0.0` in every release that knows openai 3 exists
-# (1.90.0 onward). LiteLLM 1.83.0 declares only `openai>=2.8.0` — not because
-# it is compatible with openai 3, but because it predates it.
+# Keep the history in mind. On 2026-09-03 a bare `openai>=3.6.0` resolved by
+# reaching back to LiteLLM 1.83.0, the one release old enough not to forbid
+# openai 3, and installed a pairing upstream forbade everywhere it knew to. It
+# installed, `pip check` passed and the suite passed, because provider calls are
+# mocked. A floor raised on one package can drag another backwards; the guard
+# is a matching floor on the other side. See
+# docs/security/dependabot-triage-2026-09.md and dependabot-triage-2026-11.md.
 #
-# So a bare `openai>=3.6.0` did not fail. It resolved: pip reached back to the
-# single LiteLLM release old enough not to forbid openai 3, and installed
-# litellm 1.83.0 with openai 3.7.0 — a pairing upstream forbids everywhere it
-# knew to. That is worse than a conflict, because it installs and the test
-# suite passes: the suite mocks provider calls, so nothing exercises the
-# combination. It also froze the default gateway on the oldest release the
-# security note above permits, leaving no upgrade path.
-#
-# ragbot itself needs nothing from openai 3.x — every call site uses the
-# stable `openai.OpenAI()` client present in both majors. The floor bump
-# bought no capability and cost LiteLLM sixteen versions of fixes.
-#
-# Lift this cap only when LiteLLM ships a release accepting openai 3.x, or if
-# the `direct` backend becomes the default and LiteLLM is dropped outright.
+# Call sites verified against openai 3.46.0 on 2026-11-06: `openai.OpenAI()`
+# with `organization`, `chat.completions.create` including streaming, and the
+# module-level `openai.api_key`.
 openai>=3.42.1,<4
 # google-generativeai is end-of-life; kept as a transitive dep that LiteLLM
 # and other tools still pull in. Direct usage in the compiler has migrated
@@ -42,7 +38,8 @@ google-generativeai>=0.8.6
 google-genai>=2.22.0
 # Capability-only registration must preserve missing prices and explicit effort.
 # Verified offline transformation floor: docs/model-catalog-2026-09-25.yaml.
-litellm>=1.102.1
+# 1.108.0 is also the first release that accepts openai 3 (see above).
+litellm>=1.108.0
 tiktoken>=0.14.0
 
 # --- LangChain (used by some downstream callers) -------------------------

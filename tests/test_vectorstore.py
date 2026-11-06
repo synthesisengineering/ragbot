@@ -127,6 +127,92 @@ class TestBackendResolution:
 
 
 # ---------------------------------------------------------------------------
+# Connection pool lifecycle
+# ---------------------------------------------------------------------------
+
+
+class _FakePool:
+    def __init__(self, *args, **kwargs):
+        self.closed = True
+        self.close_calls = 0
+
+    def open(self):
+        self.closed = False
+
+    def close(self):
+        self.close_calls += 1
+        self.closed = True
+
+
+class TestPoolLifecycle:
+    """The pool is closed before interpreter finalization, where Python 3.14
+    refuses the thread joins a pool's own __del__ would attempt."""
+
+    def _backend(self):
+        from synthesis_engine.vectorstore.pgvector_backend import PgvectorBackend
+
+        return PgvectorBackend(dsn="postgresql://fake/fake")
+
+    def test_opening_the_pool_registers_a_weak_exit_hook(self, monkeypatch):
+        import weakref
+
+        import psycopg_pool
+        from synthesis_engine.vectorstore import pgvector_backend
+
+        registered = []
+        monkeypatch.setattr(psycopg_pool, "ConnectionPool", _FakePool)
+        monkeypatch.setattr(
+            pgvector_backend.atexit, "register",
+            lambda fn, *args: registered.append((fn, args)),
+        )
+        backend = self._backend()
+        pool = backend._ensure_pool()
+        assert registered == [(pgvector_backend._close_pool_at_exit, registered[0][1])]
+        (pool_ref,) = registered[0][1]
+        assert isinstance(pool_ref, weakref.ref) and pool_ref() is pool
+
+        pgvector_backend._close_pool_at_exit(pool_ref)
+        assert pool.closed and pool.close_calls == 1
+        # Already closed (by close() or an earlier hook): no second close.
+        pgvector_backend._close_pool_at_exit(pool_ref)
+        assert pool.close_calls == 1
+
+    def test_exit_hook_ignores_a_collected_pool(self):
+        import weakref
+
+        from synthesis_engine.vectorstore import pgvector_backend
+
+        pool = _FakePool()
+        ref = weakref.ref(pool)
+        del pool
+        pgvector_backend._close_pool_at_exit(ref)  # must not raise
+
+    def test_close_is_idempotent(self):
+        backend = self._backend()
+        pool = _FakePool()
+        pool.open()
+        backend._pool = pool
+        backend.close()
+        backend.close()
+        assert pool.close_calls == 1
+        assert backend._pool is None
+
+    def test_reset_vector_store_closes_the_cached_backend(self, monkeypatch):
+        from synthesis_engine import vectorstore
+
+        closed = []
+
+        class _Backend:
+            def close(self):
+                closed.append(True)
+
+        monkeypatch.setattr(vectorstore, "_BACKEND", _Backend())
+        reset_vector_store()
+        assert closed == [True]
+        assert vectorstore._BACKEND is None
+
+
+# ---------------------------------------------------------------------------
 # PgvectorBackend (live integration; requires a reachable Postgres)
 # ---------------------------------------------------------------------------
 
@@ -137,6 +223,30 @@ class TestBackendResolution:
 )
 class TestPgvectorBackendLive:
     """Optional live tests; only run when an explicit test DSN is configured."""
+
+    def test_process_exit_after_using_the_pool_is_clean(self):
+        # A real interpreter exit is the only place the finalization error
+        # shows, so run one in a subprocess. The backend stays referenced
+        # until shutdown, as get_vector_store()'s module-level cache keeps it
+        # in the CLI; a backend collected earlier closes its pool in time
+        # and hides the failure.
+        import subprocess
+
+        script = (
+            "import sys; sys.path.insert(0, %r)\n"
+            "from synthesis_engine.vectorstore.pgvector_backend import PgvectorBackend\n"
+            "backend = PgvectorBackend.from_env()\n"
+            "print(backend.healthcheck()['ok'])\n"
+        ) % (_SRC,)
+        env = dict(os.environ, RAGBOT_DATABASE_URL=os.environ["RAGBOT_PGVECTOR_TEST_URL"])
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, timeout=120,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip().endswith("True")
+        assert "PythonFinalizationError" not in result.stderr
+        assert "Exception ignored" not in result.stderr
 
     def setup_method(self):
         reset_vector_store()

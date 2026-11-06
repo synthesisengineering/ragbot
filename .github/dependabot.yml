@@ -48,6 +48,16 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
+    # React refuses to run unless react and react-dom are the exact same
+    # version, so a pull request that bumps only one of them fails every web
+    # test. Dependabot opened them separately on 2026-11-06 (#140, #144) and
+    # both were red on arrival. Grouping them makes each update one pull
+    # request that moves both. See docs/security/dependabot-triage-2026-11.md.
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
     # Ignores are intentionally empty as of the 2026-05 triage. Every open
     # alert at that time was fixed by either a pin bump (next 16.0.10 to
     # 16.2.6) or a transitive override (flatted, minimatch, picomatch, ajv,

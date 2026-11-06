@@ -151,3 +151,43 @@ Two ways to resolve it, neither one a dependency bump:
 make install && python -m pip check && make test-fast
 cd web && npm ci && npm run lint && npm run test && npm run build && npm audit
 ```
+
+## Second batch — same day
+
+Clearing the queue freed both ecosystems' slots, and Dependabot opened 15 more
+pull requests (#132–#146) at 05:32–05:34 UTC. They were triaged the same
+morning.
+
+CI on all 15 ran after #131 merged, against the `main` they would land on, and
+included the new `next build` step, so it was treated as current. 13 were green.
+
+**Python (6), verified locally, then merged.** Fresh Python 3.12 environments
+from `main` and from `main` with all six floors gave identical `pip freeze`,
+clean `pip check`, and 1015 passed / 13 skipped in both. Merged #133
+`boto3>=1.43.123`, #135 `fastapi>=0.162.0`,
+#137 `opentelemetry-exporter-otlp-proto-grpc>=1.45.2`, #139 `psycopg>=3.3.7`
+and #141 `langchain-anthropic>=1.7.9`. #142 `uvicorn[standard]>=0.54.0` edits
+the line after #135's, so it conflicted and was sent back to Dependabot for a
+rebase.
+
+**Web (7), verified as a combined tree, then merged.** The seven green npm PRs
+touch no shared lines. Merged together on top of `main`, they passed `npm ci`,
+lint (24 files, 0 findings), 27 tests and `next build`, and `npm audit` found 0
+vulnerabilities. Merged #132 `@types/node` 26.6.6, #134 `eslint` 10.14.0,
+#136 `jsdom` 30.1.3, #138 `@testing-library/user-event` 14.6.8, #143
+`tailwindcss` 4.3.4, #145 `react-syntax-highlighter` 16.1.2 and #146
+`@vitejs/plugin-react` 6.2.1.
+
+### #140 and #144 — `react` and `react-dom` opened separately: closed, fixed together
+
+Each bumped one package to 19.3.1 and left the other at 19.3.0. Every web test
+file then failed to load with React's own check: `react` and `react-dom` must
+have the exact same version. Neither pull request could pass alone, and the two
+conflict on adjacent `package.json` lines, so they cannot be merged as a pair
+either.
+
+Both packages are now bumped to 19.3.1 in one change, verified with `npm ci`,
+lint, tests, `next build` and `npm audit` (0). A Dependabot `groups` entry in
+`.github/dependabot.yml` puts the two in one pull request from now on. The group
+covers only these two packages, because only they must match exactly. #117 and
+#118 showed `vitest` and `@vitest/ui` passing as separate pull requests.

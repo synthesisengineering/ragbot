@@ -34,7 +34,7 @@ from ..observability.attributes import (
     PROVIDER_OPENAI,
     PROVIDER_UNKNOWN,
 )
-from .base import LLMBackend, LLMRequest, LLMResponse, LLMUnavailableError
+from .base import LLMBackend, LLMRequest, LLMResponse, LLMUnavailableError, require_reply
 from .cache_control import (
     CacheConfig,
     apply_cache_control_to_anthropic_system,
@@ -67,6 +67,13 @@ def _provider_for(model: str) -> str:
     if m.startswith("gemini/") or "gemini" in m:
         return "google"
     return "unknown"
+
+
+def _google_finish_reason(response: Any) -> Any:
+    """The first candidate's finish reason on a google-genai response or
+    stream chunk, or None when the chunk carries none."""
+    candidates = getattr(response, "candidates", None) or []
+    return getattr(candidates[0], "finish_reason", None) if candidates else None
 
 
 def _strip_provider(model: str) -> str:
@@ -276,6 +283,7 @@ class DirectBackend(LLMBackend):
                 usage_dict["cache_read_input_tokens"] = cache_meta.cache_read_input_tokens
             if cache_meta.cache_creation_input_tokens:
                 usage_dict["cache_creation_input_tokens"] = cache_meta.cache_creation_input_tokens
+            require_reply("".join(parts), finish_reason, request)
             return LLMResponse(
                 text="".join(parts),
                 model=response_model,
@@ -330,6 +338,11 @@ class DirectBackend(LLMBackend):
                 output_tokens=cache_meta.output_tokens,
                 cache_read_tokens=cache_meta.cache_read_input_tokens,
                 cache_creation_tokens=cache_meta.cache_creation_input_tokens,
+            )
+            require_reply(
+                "".join(chunks),
+                getattr(final_message, "stop_reason", None) if final_message else None,
+                request,
             )
             return "".join(chunks)
 
@@ -416,6 +429,7 @@ class DirectBackend(LLMBackend):
                 output_tokens=completion_tok,
                 finish_reason=finish_reason,
             )
+            require_reply(text or "", finish_reason, request)
             return LLMResponse(
                 text=text or "",
                 model=response_model,
@@ -446,12 +460,14 @@ class DirectBackend(LLMBackend):
             kwargs = self._build_openai_kwargs(request)
             chunks = []
             final_usage = None
+            finish_reason = None
             for chunk in client.chat.completions.create(**kwargs, stream=True):
                 chunk_usage = getattr(chunk, "usage", None)
                 if chunk_usage is not None:
                     final_usage = chunk_usage
                 if not chunk.choices:
                     continue
+                finish_reason = getattr(chunk.choices[0], "finish_reason", None) or finish_reason
                 delta = chunk.choices[0].delta
                 text = getattr(delta, "content", None)
                 if text:
@@ -468,6 +484,7 @@ class DirectBackend(LLMBackend):
                     input_tokens=int(getattr(final_usage, "prompt_tokens", 0) or 0),
                     output_tokens=int(getattr(final_usage, "completion_tokens", 0) or 0),
                 )
+            require_reply("".join(chunks), finish_reason, request)
             return "".join(chunks)
 
     # ------------------------------------------------------------------
@@ -565,6 +582,7 @@ class DirectBackend(LLMBackend):
                 input_tokens=input_toks or None,
                 output_tokens=output_toks or None,
             )
+            require_reply(resp.text or "", _google_finish_reason(resp), request)
             return LLMResponse(
                 text=resp.text or "",
                 model=model_id,
@@ -597,10 +615,12 @@ class DirectBackend(LLMBackend):
                 kwargs["config"] = config
             chunks = []
             final_usage = None
+            finish_reason = None
             for chunk in client.models.generate_content_stream(**kwargs):
                 chunk_usage = getattr(chunk, "usage_metadata", None)
                 if chunk_usage is not None:
                     final_usage = chunk_usage
+                finish_reason = _google_finish_reason(chunk) or finish_reason
                 text = getattr(chunk, "text", None)
                 if text:
                     chunks.append(text)
@@ -616,4 +636,5 @@ class DirectBackend(LLMBackend):
                     input_tokens=int(getattr(final_usage, "prompt_token_count", 0) or 0),
                     output_tokens=int(getattr(final_usage, "candidates_token_count", 0) or 0),
                 )
+            require_reply("".join(chunks), finish_reason, request)
             return "".join(chunks)

@@ -600,6 +600,10 @@ def chat_stream(
     import queue, threading
 
     q: "queue.Queue[Optional[str]]" = queue.Queue()
+    # An exception raised in the streaming thread is handed back here and
+    # re-raised once the stream drains. Left in the thread it would vanish,
+    # and the caller would see a stream that simply ended.
+    failures: List[BaseException] = []
 
     def on_chunk(text: str) -> None:
         q.put(text)
@@ -607,6 +611,8 @@ def chat_stream(
     def runner() -> None:
         try:
             backend.stream(llm_request, on_chunk=on_chunk)
+        except BaseException as exc:  # noqa: BLE001 - re-raised by the generator
+            failures.append(exc)
         finally:
             q.put(None)  # sentinel: end of stream
 
@@ -617,3 +623,5 @@ def chat_stream(
         if item is None:
             break
         yield item
+    if failures:
+        raise ChatError(f"Chat failed: {failures[0]}") from failures[0]

@@ -39,6 +39,46 @@ class LLMUnavailableError(RuntimeError):
     """Raised when a backend cannot be constructed (missing deps, config, etc.)."""
 
 
+class OutputBudgetExhaustedError(RuntimeError):
+    """Raised when a model stops at its output limit before writing any reply.
+
+    Reasoning tokens count against ``max_tokens``. A reasoning model given a
+    small budget can spend all of it thinking and return empty content with a
+    length finish reason. Passing that on as an empty reply would look like a
+    model that had nothing to say.
+    """
+
+
+# Finish reasons meaning "stopped at the output limit", normalised to lower
+# case: OpenAI and LiteLLM report ``length``, Anthropic ``max_tokens`` and
+# google-genai the ``FinishReason.MAX_TOKENS`` enum.
+_OUTPUT_LIMIT_FINISH_REASONS = frozenset({"length", "max_tokens"})
+
+
+def _normalise_finish_reason(finish_reason: Any) -> Optional[str]:
+    if finish_reason is None:
+        return None
+    name = getattr(finish_reason, "name", None)  # google-genai enums
+    return str(name if name is not None else finish_reason).lower()
+
+
+def require_reply(text: str, finish_reason: Any, request: "LLMRequest") -> None:
+    """Raise OutputBudgetExhaustedError when a completion produced no text
+    because it hit its output limit.
+
+    Every backend calls this for both completion and streaming, so an empty
+    reply never reaches a caller as if the model had finished.
+    """
+    if text:
+        return
+    if _normalise_finish_reason(finish_reason) in _OUTPUT_LIMIT_FINISH_REASONS:
+        raise OutputBudgetExhaustedError(
+            f"{request.model} used its whole {request.max_tokens}-token output "
+            "budget without writing a reply; reasoning counts against that "
+            "budget. Raise max_tokens or lower thinking_effort."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Data contracts
 # ---------------------------------------------------------------------------

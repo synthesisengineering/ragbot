@@ -60,6 +60,12 @@ compatibility with superseded models, runtimes and SDK versions is not kept.
 
 ### Fixed
 
+- A reasoning model that spent its whole output budget thinking returned an empty reply with
+  no error. Every backend now raises `OutputBudgetExhaustedError`, which names the budget
+  and says to raise `max_tokens` or lower the thinking effort; a partial reply is still
+  returned.
+- A streamed chat that failed simply ended: the streaming thread dropped its exception.
+  `chat_stream` now re-raises it as `ChatError`, which the web UI shows.
 - `local_only` and downgrade-to-local workspace policies recognised no configured local
   model and suggested models that did not exist. Local models are now those `engines.yaml`
   serves through Ollama, and Ollama `:cloud` tags are never treated as local.

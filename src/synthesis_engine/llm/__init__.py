@@ -64,6 +64,7 @@ from .base import (
     LLMRequest,
     LLMResponse,
     LLMUnavailableError,
+    OutputBudgetExhaustedError,
 )
 
 logger = logging.getLogger(__name__)
@@ -298,6 +299,7 @@ __all__ = [
     "LLMResponse",
     "LLMUnavailableError",
     "ModelDeniedError",
+    "OutputBudgetExhaustedError",
     "get_llm_backend",
     "get_routed_llm_backend",
     "reset_llm_backend",

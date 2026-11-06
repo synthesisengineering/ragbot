@@ -32,7 +32,7 @@ from ..observability.attributes import (
     PROVIDER_OPENAI,
     PROVIDER_UNKNOWN,
 )
-from .base import LLMBackend, LLMRequest, LLMResponse, LLMUnavailableError
+from .base import LLMBackend, LLMRequest, LLMResponse, LLMUnavailableError, require_reply
 from .cache_control import (
     CacheConfig,
     apply_cache_control_to_messages,
@@ -247,6 +247,7 @@ class LiteLLMBackend(LLMBackend):
             if cache_meta.cache_creation_input_tokens:
                 usage_dict["cache_creation_input_tokens"] = cache_meta.cache_creation_input_tokens
 
+            require_reply(text, finish_reason, request)
             return LLMResponse(
                 text=text,
                 model=response_model,
@@ -278,6 +279,7 @@ class LiteLLMBackend(LLMBackend):
             response = self._litellm.completion(**kwargs, stream=True)
             chunks = []
             final_usage = None
+            finish_reason = None
             for chunk in response:
                 if not chunk:
                     continue
@@ -288,6 +290,7 @@ class LiteLLMBackend(LLMBackend):
                     final_usage = chunk_usage
                 if not getattr(chunk, "choices", None):
                     continue
+                finish_reason = getattr(chunk.choices[0], "finish_reason", None) or finish_reason
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None)
                 if text:
@@ -307,6 +310,7 @@ class LiteLLMBackend(LLMBackend):
                 cache_read_tokens=cache_meta.cache_read_input_tokens,
                 cache_creation_tokens=cache_meta.cache_creation_input_tokens,
             )
+            require_reply(assembled, finish_reason, request)
             return assembled
 
     def healthcheck(self) -> Dict[str, Any]:

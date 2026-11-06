@@ -11,12 +11,14 @@ The tests are organised in four groups:
 3. **Auth** — bearer-token resolution, ``allowed_tools`` gating, stdio
    bypass, and the HTTP fail-closed behaviour when the config is
    missing or malformed.
-4. **End-to-end** — uses ``mcp.shared.memory.create_connected_server_
-   and_client_session`` to spin up the real SDK Server and a real
-   ClientSession over an in-memory transport, then walks list_tools →
-   call_tool → list_resources → read_resource. This is the strongest
-   guarantee that the registered handlers behave like an MCP server
-   would for an external client.
+4. **End-to-end** — connects ``mcp.Client`` to the real SDK Server
+   in-process, then walks list_tools → call_tool → list_resources →
+   read_resource. This is the strongest guarantee that the registered
+   handlers behave like an MCP server would for an external client.
+5. **Tool-call semantics and HTTP** — input and output schema
+   validation, dispatch errors as tool errors, unknown resources as
+   ``INVALID_PARAMS``, fail-closed bearer resolution, and a real
+   Streamable HTTP round trip through Uvicorn with bearer tokens.
 
 All tests use placeholder workspace names (``acme-news``, ``acme-user``,
 ``beta-media``) — ragbot is a public repo and client names never appear
@@ -332,14 +334,14 @@ def test_server_constructs_with_all_five_tools(server: RagbotMCPServer) -> None:
 
 def test_tool_definitions_include_input_and_output_schemas() -> None:
     for tool in TOOL_DEFINITIONS:
-        assert tool.inputSchema, f"tool {tool.name} has no inputSchema"
-        assert tool.outputSchema, (
-            f"tool {tool.name} has no outputSchema; MCP server tools "
+        assert tool.input_schema, f"tool {tool.name} has no input schema"
+        assert tool.output_schema, (
+            f"tool {tool.name} has no output schema; MCP server tools "
             f"must publish structured-output schemas"
         )
         # Both schemas must be valid JSON Schema "type: object" shapes.
-        assert tool.inputSchema.get("type") == "object"
-        assert tool.outputSchema.get("type") == "object"
+        assert tool.input_schema.get("type") == "object"
+        assert tool.output_schema.get("type") == "object"
 
 
 # ---------------------------------------------------------------------------
@@ -851,20 +853,16 @@ def test_reading_audit_resource_returns_jsonl(
 async def test_end_to_end_in_memory_client_calls_workspace_search(
     server: RagbotMCPServer,
 ) -> None:
-    """Spin up an in-memory client + server pair and call workspace_search.
+    """Spin up an in-process client + server pair and call workspace_search.
 
-    The pairing uses
-    :func:`mcp.shared.memory.create_connected_server_and_client_session`,
-    which is the SDK's canonical in-process transport. This exercises
-    the full framing path: the registered ``list_tools`` and
-    ``call_tool`` handlers see real :class:`CallToolRequest` envelopes
-    and produce real :class:`CallToolResult` payloads.
+    ``mcp.Client(server)`` is the SDK's in-process transport. This
+    exercises the full framing path: the registered ``list_tools`` and
+    ``call_tool`` handlers see real ``tools/call`` envelopes and produce
+    real :class:`CallToolResult` payloads.
     """
-    from mcp.shared.memory import create_connected_server_and_client_session
+    from mcp import Client
 
-    async with create_connected_server_and_client_session(
-        server.server, raise_exceptions=True
-    ) as client:
+    async with Client(server.server, raise_exceptions=True) as client:
         tools_listing = await client.list_tools()
         names = {t.name for t in tools_listing.tools}
         assert {
@@ -879,10 +877,11 @@ async def test_end_to_end_in_memory_client_calls_workspace_search(
             "workspace_search",
             arguments={"workspace": "acme-news", "query": "hello"},
         )
-        assert result.isError is False
-        # Structured output is preserved.
-        assert result.structuredContent is not None
-        sc = result.structuredContent
+        assert result.is_error is False
+        # Structured output is preserved, alongside its JSON text.
+        assert result.structured_content is not None
+        sc = result.structured_content
+        assert json.loads(result.content[0].text) == sc
         assert sc["workspace"] == "acme-news"
         assert len(sc["blocks"]) == 2
 
@@ -891,8 +890,8 @@ async def test_end_to_end_in_memory_client_calls_workspace_search(
 async def test_end_to_end_in_memory_client_reads_audit_resource(
     server: RagbotMCPServer, isolated_audit_log: Path
 ) -> None:
-    """Round-trip a resource read over the in-memory transport."""
-    from mcp.shared.memory import create_connected_server_and_client_session
+    """Round-trip a resource read over the in-process transport."""
+    from mcp import Client
 
     # Pre-populate the audit log via a dispatch call.
     ctx = server._build_dispatch_context(bearer=None)
@@ -905,9 +904,7 @@ async def test_end_to_end_in_memory_client_reads_audit_resource(
         ctx,
     )
 
-    async with create_connected_server_and_client_session(
-        server.server, raise_exceptions=True
-    ) as client:
+    async with Client(server.server, raise_exceptions=True) as client:
         listing = await client.list_resources()
         uris = [str(r.uri) for r in listing.resources]
         assert AUDIT_RESOURCE_URI in uris
@@ -927,12 +924,11 @@ async def test_end_to_end_in_memory_client_reads_audit_resource(
 
 
 async def _get_resource_list(server: RagbotMCPServer):
-    from mcp import types as mcp_types
+    from mcp import Client
 
-    handler = server.server.request_handlers[mcp_types.ListResourcesRequest]
-    req = mcp_types.ListResourcesRequest(method="resources/list")
-    result = await handler(req)
-    return result.root.resources
+    async with Client(server.server, raise_exceptions=True) as client:
+        result = await client.list_resources()
+    return result.resources
 
 
 def _read_resource(server: RagbotMCPServer, uri: str):
@@ -940,3 +936,157 @@ def _read_resource(server: RagbotMCPServer, uri: str):
     from synthesis_engine.mcp_server.resources import read_resource_contents
 
     return read_resource_contents(server._resource_provider, uri)
+
+
+# ---------------------------------------------------------------------------
+# Group 6 — Tool-call semantics the server supplies itself (mcp 2.x)
+#
+# The 1.x SDK validated arguments, packaged structured output and turned
+# exceptions into tool errors on the server's behalf. The 2.x low-level
+# server leaves all of that to the handler; these tests pin it down.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_call_tool_rejects_arguments_that_fail_the_input_schema(
+    server: RagbotMCPServer,
+) -> None:
+    from mcp import Client
+
+    async with Client(server.server, raise_exceptions=True) as client:
+        result = await client.call_tool("workspace_search", arguments={"workspace": "acme-news"})
+    assert result.is_error is True
+    assert result.content[0].text.startswith("Input validation error:")
+    assert "query" in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_call_tool_reports_dispatch_errors_as_tool_errors(
+    server: RagbotMCPServer,
+) -> None:
+    from mcp import Client
+
+    async with Client(server.server, raise_exceptions=True) as client:
+        result = await client.call_tool("no_such_tool", arguments={})
+    assert result.is_error is True
+    assert result.content[0].text.startswith("[")
+
+
+@pytest.mark.asyncio
+async def test_call_tool_rejects_output_that_fails_the_output_schema(
+    server: RagbotMCPServer, monkeypatch
+) -> None:
+    from mcp import Client
+
+    import synthesis_engine.mcp_server.server as server_module
+
+    async def bad_dispatch(name, arguments, ctx):
+        return {"workspace": "acme-news"}  # missing required "blocks"
+
+    monkeypatch.setattr(server_module, "dispatch_tool", bad_dispatch)
+    async with Client(server.server, raise_exceptions=True) as client:
+        result = await client.call_tool(
+            "workspace_search", arguments={"workspace": "acme-news", "query": "q"}
+        )
+    assert result.is_error is True
+    assert result.content[0].text.startswith("Output validation error:")
+
+
+@pytest.mark.asyncio
+async def test_reading_unknown_resource_over_mcp_is_invalid_params(
+    server: RagbotMCPServer,
+) -> None:
+    from mcp import Client, MCPError
+    from mcp.types import INVALID_PARAMS
+
+    async with Client(server.server) as client:
+        with pytest.raises(MCPError) as excinfo:
+            await client.read_resource("synthesis://nope/whatever")
+    assert excinfo.value.error.code == INVALID_PARAMS
+
+
+@pytest.mark.asyncio
+async def test_http_request_without_auth_config_fails_closed(
+    server: RagbotMCPServer,
+) -> None:
+    """A request that carries an HTTP request but no auth config is refused.
+
+    Stdio and in-process sessions have no HTTP request and run with
+    process-local trust. Anything that arrives over HTTP must resolve a
+    bearer token; without an auth config there is nothing to resolve it
+    against, so the call is an error rather than a silent stdio-trust run.
+    """
+    from types import SimpleNamespace
+
+    from mcp.types import CallToolRequestParams
+
+    ctx = SimpleNamespace(request=SimpleNamespace(headers={"authorization": "Bearer x"}))
+    result = await server._on_call_tool(
+        ctx,
+        CallToolRequestParams(
+            name="workspace_search", arguments={"workspace": "acme-news", "query": "q"}
+        ),
+    )
+    assert result.is_error is True
+    assert "[unauthorized]" in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_http_transport_enforces_bearer_tokens_end_to_end(
+    server: RagbotMCPServer,
+) -> None:
+    """Serve over real Streamable HTTP and check both auth layers.
+
+    Without a token the ASGI layer answers 401. With a token restricted to
+    ``workspace_*`` the allowed tool runs and ``agent_run_start`` comes
+    back as a ``[forbidden]`` tool error, which shows the handler resolved
+    the token from the request it was actually serving.
+    """
+    import socket
+
+    import httpx2
+    import uvicorn
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    auth = MCPServerAuthConfig(
+        tokens=(BearerToken(name="search", token="search-token", allowed_tools=("workspace_*",)),)
+    )
+    app = server.asgi_app_factory(auth_config=auth)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    uv = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+    )
+    serve_task = asyncio.create_task(uv.serve())
+    try:
+        for _ in range(200):
+            if uv.started:
+                break
+            await asyncio.sleep(0.025)
+        assert uv.started, "uvicorn did not start"
+        url = f"http://127.0.0.1:{port}/mcp"
+
+        async with httpx2.AsyncClient() as http:
+            unauthenticated = await http.post(url, json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+        assert unauthenticated.status_code == 401
+
+        async with httpx2.AsyncClient(headers={"Authorization": "Bearer search-token"}) as http:
+            async with streamable_http_client(url, http_client=http) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    allowed = await session.call_tool(
+                        "workspace_search", {"workspace": "acme-news", "query": "hello"}
+                    )
+                    assert allowed.is_error is False
+                    assert allowed.structured_content["workspace"] == "acme-news"
+                    denied = await session.call_tool(
+                        "agent_run_start",
+                        {"workspace_or_workspaces": "acme-news", "task": "do a thing"},
+                    )
+                    assert denied.is_error is True
+                    assert "[forbidden]" in denied.content[0].text
+    finally:
+        uv.should_exit = True
+        await serve_task

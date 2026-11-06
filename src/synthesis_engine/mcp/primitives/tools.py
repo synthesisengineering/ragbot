@@ -22,6 +22,7 @@ from mcp import ClientSession
 from mcp.types import (
     CallToolResult,
     ListToolsResult,
+    PaginatedRequestParams,
     Tool,
 )
 
@@ -36,9 +37,11 @@ async def list_tools(session: ClientSession) -> list[Tool]:
     tools: list[Tool] = []
     cursor: Optional[str] = None
     while True:
-        page: ListToolsResult = await session.list_tools(cursor=cursor)
+        page: ListToolsResult = await session.list_tools(
+            params=PaginatedRequestParams(cursor=cursor) if cursor else None
+        )
         tools.extend(page.tools)
-        cursor = page.nextCursor
+        cursor = page.next_cursor
         if not cursor:
             return tools
 
@@ -55,9 +58,9 @@ async def call_tool(
     The returned :class:`CallToolResult` carries:
 
     * ``content`` — a list of content blocks (text, image, embedded resource).
-    * ``structuredContent`` — when the tool declares ``outputSchema``, the
+    * ``structured_content`` — when the tool declares an output schema, the
       parsed structured object.
-    * ``isError`` — True if the tool reported a user-facing failure.
+    * ``is_error`` — True if the tool reported a user-facing failure.
 
     The caller decides how to render content; the substrate does not
     presume a particular response shape because tools vary widely.
@@ -65,10 +68,7 @@ async def call_tool(
     return await session.call_tool(
         name=name,
         arguments=arguments or {},
-        read_timeout_seconds=(
-            None if timeout_seconds is None else
-            __import__("datetime").timedelta(seconds=timeout_seconds)
-        ),
+        read_timeout_seconds=timeout_seconds,
     )
 
 

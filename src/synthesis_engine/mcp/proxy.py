@@ -11,10 +11,12 @@ application that:
    stdio.
 
 The proxy is built on the SDK's :class:`StreamableHTTPSessionManager`,
-which already implements the 2025-11-25 streamable-HTTP transport and
-session handling correctly. We supply a backing ``MCPServer`` instance
-that forwards every request and notification onto a long-lived
-:class:`mcp.ClientSession` attached to the upstream stdio child.
+which implements the Streamable HTTP transport and session handling. We
+supply a backing low-level ``Server`` whose handlers forward each request
+onto a long-lived :class:`mcp.ClientSession` attached to the upstream
+stdio child. Results pass through whole: paging follows the client's
+cursor one page at a time, and a tool result keeps its ``is_error`` flag
+and structured content.
 
 Usage::
 
@@ -43,20 +45,22 @@ from typing import Any, Optional
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server as MCPServer
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import (
+    CallToolRequestParams,
+    CallToolResult,
+    GetPromptRequestParams,
     GetPromptResult,
     ListPromptsResult,
     ListResourcesResult,
     ListResourceTemplatesResult,
     ListToolsResult,
-    Prompt,
+    PaginatedRequestParams,
+    ReadResourceRequestParams,
     ReadResourceResult,
-    Resource,
-    Tool,
 )
-from pydantic import AnyUrl
 
 from .config import MCPServerConfig
 
@@ -150,84 +154,65 @@ class StdioHTTPProxy:
     # ------ relay ----------------------------------------------------------
 
     def _build_relay_app(self) -> MCPServer:
-        """Construct an :class:`MCPServer` that forwards calls to the upstream."""
+        """Construct a low-level server that forwards calls to the upstream."""
 
-        srv: MCPServer[Any, Any] = MCPServer(
-            name=f"proxy:{self.server.id}",
+        async def list_tools(
+            ctx: ServerRequestContext[Any], params: Optional[PaginatedRequestParams]
+        ) -> ListToolsResult:
+            upstream = await self._ensure_upstream()
+            return await upstream.list_tools(params=params)
+
+        async def call_tool(
+            ctx: ServerRequestContext[Any], params: CallToolRequestParams
+        ) -> CallToolResult:
+            upstream = await self._ensure_upstream()
+            return await upstream.call_tool(name=params.name, arguments=params.arguments or {})
+
+        async def list_resources(
+            ctx: ServerRequestContext[Any], params: Optional[PaginatedRequestParams]
+        ) -> ListResourcesResult:
+            upstream = await self._ensure_upstream()
+            return await upstream.list_resources(params=params)
+
+        async def list_resource_templates(
+            ctx: ServerRequestContext[Any], params: Optional[PaginatedRequestParams]
+        ) -> ListResourceTemplatesResult:
+            upstream = await self._ensure_upstream()
+            return await upstream.list_resource_templates(params=params)
+
+        async def read_resource(
+            ctx: ServerRequestContext[Any], params: ReadResourceRequestParams
+        ) -> ReadResourceResult:
+            upstream = await self._ensure_upstream()
+            return await upstream.read_resource(str(params.uri))
+
+        async def list_prompts(
+            ctx: ServerRequestContext[Any], params: Optional[PaginatedRequestParams]
+        ) -> ListPromptsResult:
+            upstream = await self._ensure_upstream()
+            return await upstream.list_prompts(params=params)
+
+        async def get_prompt(
+            ctx: ServerRequestContext[Any], params: GetPromptRequestParams
+        ) -> GetPromptResult:
+            upstream = await self._ensure_upstream()
+            return await upstream.get_prompt(params.name, params.arguments or {})
+
+        return MCPServer(
+            f"proxy:{self.server.id}",
             version="0.1.0",
             instructions=(
                 f"Streamable-HTTP proxy in front of stdio server "
                 f"{self.server.command} {' '.join(self.server.args)}."
             ),
+            on_list_tools=list_tools,
+            on_call_tool=call_tool,
+            on_list_resources=list_resources,
+            on_list_resource_templates=list_resource_templates,
+            on_read_resource=read_resource,
+            on_list_prompts=list_prompts,
+            on_get_prompt=get_prompt,
         )
-
-        @srv.list_tools()
-        async def _list_tools() -> list[Tool]:
-            upstream = await self._ensure_upstream()
-            tools: list[Tool] = []
-            cursor = None
-            while True:
-                page: ListToolsResult = await upstream.list_tools(cursor=cursor)
-                tools.extend(page.tools)
-                cursor = page.nextCursor
-                if not cursor:
-                    return tools
-
-        @srv.call_tool()
-        async def _call_tool(name: str, arguments: dict[str, Any] | None) -> Any:
-            upstream = await self._ensure_upstream()
-            result = await upstream.call_tool(name=name, arguments=arguments or {})
-            return result.content if result is not None else []
-
-        @srv.list_resources()
-        async def _list_resources() -> list[Resource]:
-            upstream = await self._ensure_upstream()
-            resources: list[Resource] = []
-            cursor = None
-            while True:
-                page: ListResourcesResult = await upstream.list_resources(cursor=cursor)
-                resources.extend(page.resources)
-                cursor = page.nextCursor
-                if not cursor:
-                    return resources
-
-        @srv.list_resource_templates()
-        async def _list_templates() -> list:
-            upstream = await self._ensure_upstream()
-            out: list = []
-            cursor = None
-            while True:
-                page: ListResourceTemplatesResult = (
-                    await upstream.list_resource_templates(cursor=cursor)
-                )
-                out.extend(page.resourceTemplates)
-                cursor = page.nextCursor
-                if not cursor:
-                    return out
-
-        @srv.read_resource()
-        async def _read_resource(uri: AnyUrl) -> ReadResourceResult:
-            upstream = await self._ensure_upstream()
-            return await upstream.read_resource(uri)
-
-        @srv.list_prompts()
-        async def _list_prompts() -> list[Prompt]:
-            upstream = await self._ensure_upstream()
-            prompts: list[Prompt] = []
-            cursor = None
-            while True:
-                page: ListPromptsResult = await upstream.list_prompts(cursor=cursor)
-                prompts.extend(page.prompts)
-                cursor = page.nextCursor
-                if not cursor:
-                    return prompts
-
-        @srv.get_prompt()
-        async def _get_prompt(name: str, arguments: dict | None) -> GetPromptResult:
-            upstream = await self._ensure_upstream()
-            return await upstream.get_prompt(name=name, arguments=arguments or {})
-
-        return srv
 
     # ------ ASGI ------------------------------------------------------------
 

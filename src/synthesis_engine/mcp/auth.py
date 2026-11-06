@@ -40,8 +40,8 @@ desktop OS without any additional plumbing.
 from __future__ import annotations
 
 import asyncio
+import html
 import http.server
-import json
 import logging
 import os
 import socket
@@ -54,11 +54,16 @@ from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 from mcp.client.auth import OAuthClientProvider, TokenStorage
-from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from mcp.shared.auth import (
+    AuthorizationCodeResult,
+    OAuthClientInformationFull,
+    OAuthClientMetadata,
+    OAuthToken,
+)
 
 from synthesis_engine.exceptions import SynthesisError
 
-from .config import AuthConfig, MCPServerConfig, mcp_state_dir
+from .config import MCPServerConfig, mcp_state_dir
 
 
 logger = logging.getLogger("synthesis_engine.mcp.auth")
@@ -164,6 +169,7 @@ class DiskTokenStorage(TokenStorage):
 class _CallbackResult:
     code: Optional[str] = None
     state: Optional[str] = None
+    iss: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -181,13 +187,19 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
         if bucket is not None:
             bucket.code = (qs.get("code") or [None])[0]
             bucket.state = (qs.get("state") or [None])[0]
+            # RFC 9207 issuer identification; the SDK checks it against the
+            # authorization server it expected when the server sends one.
+            bucket.iss = (qs.get("iss") or [None])[0]
             bucket.error = (qs.get("error") or [None])[0]
         if bucket and bucket.error:
             self.send_response(400)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
+            # The error string comes from the redirect's query string, so it is
+            # escaped before it reaches the page.
             self.wfile.write(
-                f"<html><body><h1>Authorization failed</h1><p>{bucket.error}</p></body></html>".encode()
+                f"<html><body><h1>Authorization failed</h1>"
+                f"<p>{html.escape(bucket.error)}</p></body></html>".encode()
             )
         else:
             self.send_response(200)
@@ -230,8 +242,8 @@ class LocalBrowserOAuthFlow:
       fully-formed authorization URL and is responsible for getting the
       user there.
     * :meth:`await_callback` is the ``callback_handler`` — it blocks
-      until the loopback HTTP server receives the redirect and returns
-      ``(code, state)``.
+      until the loopback HTTP server receives the redirect and returns an
+      :class:`AuthorizationCodeResult` (code, state and issuer).
 
     The local server is bound only after :meth:`open_in_browser` is
     invoked, on the configured port (or any free port if it is taken),
@@ -291,8 +303,8 @@ class LocalBrowserOAuthFlow:
             # responsive even on platforms where it blocks briefly.
             await asyncio.to_thread(webbrowser.open, authorization_url)
 
-    async def await_callback(self) -> tuple[str, Optional[str]]:
-        """``callback_handler`` body: wait for the redirect, return (code, state)."""
+    async def await_callback(self) -> AuthorizationCodeResult:
+        """``callback_handler`` body: wait for the redirect, return its result."""
         # blocking wait on the threading.Event without holding the event loop.
         deadline = time.monotonic() + 300.0
         while not self._done.is_set():
@@ -305,7 +317,11 @@ class LocalBrowserOAuthFlow:
                 raise MCPAuthError(f"authorization failed: {self._bucket.error}")
             if not self._bucket.code:
                 raise MCPAuthError("authorization succeeded but no code was returned")
-            return self._bucket.code, self._bucket.state
+            return AuthorizationCodeResult(
+                code=self._bucket.code,
+                state=self._bucket.state,
+                iss=self._bucket.iss,
+            )
         finally:
             self._stop_server()
 

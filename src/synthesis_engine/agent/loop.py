@@ -32,7 +32,6 @@ Architectural notes:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from typing import (
     Any,
@@ -49,7 +48,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing-only
     from ..policy.routing import RoutingPolicy
 
 from .checkpoints import CheckpointStore, FilesystemCheckpointStore
-from .grading import GradingResult, SelfGrader
+from .grading import SelfGrader
 from .permissions import (
     PermissionRegistry,
     PermissionResult,
@@ -587,7 +586,6 @@ class AgentLoop:
         always returns a path even when neither exists; the policy
         loader emits a one-time warning when ``routing.yaml`` is missing.
         """
-        import os
         from pathlib import Path
 
         candidates = [
@@ -1555,7 +1553,7 @@ def _coerce_tool_output(result: Any) -> Any:
     """Reduce an MCP CallToolResult to a serialisable form.
 
     ``CallToolResult`` carries a ``.content`` list of typed content
-    blocks and an ``.isError`` flag. For the agent state we capture the
+    blocks and an ``.is_error`` flag. For the agent state we capture the
     flag plus a list of text fragments; structured content is preserved
     under ``structured_content`` when present.
     """
@@ -1566,7 +1564,7 @@ def _coerce_tool_output(result: Any) -> Any:
         return result
 
     payload: Dict[str, Any] = {}
-    is_error = getattr(result, "isError", None)
+    is_error = getattr(result, "is_error", None)
     if is_error is not None:
         payload["is_error"] = bool(is_error)
         if is_error:
@@ -1576,9 +1574,7 @@ def _coerce_tool_output(result: Any) -> Any:
     text = _extract_text(result)
     if text:
         payload["text"] = text
-    structured = getattr(result, "structuredContent", None) or getattr(
-        result, "structured_content", None
-    )
+    structured = getattr(result, "structured_content", None)
     if structured is not None:
         payload["structured_content"] = structured
     return payload or _coerce_str(result)

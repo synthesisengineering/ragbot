@@ -34,7 +34,7 @@ anthropic>=1.6.0
 #
 # Lift this cap only when LiteLLM ships a release accepting openai 3.x, or if
 # the `direct` backend becomes the default and LiteLLM is dropped outright.
-openai>=2.32.0,<3
+openai>=3.42.1,<4
 # google-generativeai is end-of-life; kept as a transitive dep that LiteLLM
 # and other tools still pull in. Direct usage in the compiler has migrated
 # to google-genai (see below).

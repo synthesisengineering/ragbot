@@ -131,16 +131,26 @@ the wasm32 binding. It is not the macOS lockfile omission recorded in 2026-09.
 (4.0.9 for one, 4.2.1 for the rest). `filelock` is transitive, through `torch`,
 `huggingface_hub` and `litellm`.
 
-LiteLLM 1.108.1, the latest release, declares `filelock>=3.16.1,<4.0`. Adding
+LiteLLM 1.108.1, the latest release, declares `filelock>=3.16.1,<4.0`. Every
+release from 1.104.0 on carries that cap. Adding
 `filelock>=4.2.1` to `requirements.txt` does resolve, and that is the problem:
 the resolver moves LiteLLM back from 1.108.1 to 1.103.10, the newest release
 without the cap. It is the openai 3 case from 2026-09 again. The result would
 pair LiteLLM with a `filelock` major its own later releases forbid, and would
 fix the default gateway at an older version.
 
+After #154 and the LiteLLM 1.108.0 floor, the same `filelock>=4.2.1` floor no
+longer resolves at all. openai 3 needs LiteLLM 1.108.0 or later, and every
+LiteLLM from 1.104.0 on caps `filelock` below 4 (`uv pip compile` reports the
+requirements as unsatisfiable). LiteLLM 1.109.0rc1, a pre-release published
+2026-11-04, declares `filelock<5`. The first stable release carrying that
+change clears the cap.
+
 Two ways to resolve it, neither one a dependency bump:
 
-1. A LiteLLM release that accepts `filelock` 4. The next pass checks this first.
+1. A stable LiteLLM release that accepts `filelock` 4 (1.109.0rc1 already
+   does). Then add `filelock>=4.2.1` to `requirements.txt` and confirm `pip
+   freeze` moves nothing else backwards.
 2. Make the `direct` backend the default and drop LiteLLM from
    `requirements.txt`. The 2026-09 triage already named this as a decision to
    make on its own merits.
@@ -191,3 +201,50 @@ lint, tests, `next build` and `npm audit` (0). A Dependabot `groups` entry in
 `.github/dependabot.yml` puts the two in one pull request from now on. The group
 covers only these two packages, because only they must match exactly. #117 and
 #118 showed `vitest` and `@vitest/ui` passing as separate pull requests.
+
+## Third batch — same day
+
+Dependabot opened eight more pull requests (#148–#155) at 14:46 UTC. CI on all
+eight ran against current `main`.
+
+**Web (2), merged.** #152 `typescript-eslint` 8.72.1 and #155
+`@tailwindcss/postcss` 4.3.4. Merged together on `main` they passed `npm ci`,
+lint, tests and `next build`, and `npm audit` found 0 vulnerabilities.
+
+**Python (5), verified locally, then merged.** #149 `pydantic>=2.14.2`,
+#150 `pytest>=9.2.0`, #151 `transformers>=5.22.1`,
+#153 `opentelemetry-sdk>=1.45.2` and #154 `openai>=3.42.1,<4`. Fresh Python 3.12
+environments from `main` and from `main` with all five differed in exactly one
+package, openai 2.54.0 → 3.46.0. LiteLLM stayed at 1.108.1, `pip check` was
+clean, and both ran 1015 passed / 13 skipped.
+
+### #154 — openai 3: the cap's reason is gone
+
+`requirements.txt` capped openai at `<3` because LiteLLM capped it there (see the
+2026-09 addendum). LiteLLM 1.108.0 is the first release that declares
+`openai<4.0.0`; 1.102.1 through 1.106.7 all say `<3.0.0`. With an openai 3
+floor, the resolver can no longer reach back to a LiteLLM that predates openai
+3, because the LiteLLM floor already sits above those releases.
+
+The checks went past the suite. `tests/test_transport_contract_repair.py` drives
+the real `openai.OpenAI` client through a mock HTTP transport with Ragbot's own
+request builder, and it passed on 3.46.0. A separate check against 3.46.0 covered
+the paths the suite does not: module-level `openai.api_key`, the
+`organization` argument, and streaming `chat.completions.create`.
+
+Follow-up in this pass: the comment block above the openai line, which explained
+a cap that no longer exists, now explains the pairing. The LiteLLM floor rises
+from 1.102.1 to 1.108.0, so the requirement states the real constraint.
+
+### #148 — mcp 2.x: closed, migration under way
+
+`mcp>=2.3.0,<3` failed to import in six test modules. mcp 2.x is a redesign
+rather than a rename:
+
+- the client's experimental tasks namespace is gone;
+- `RequestContext` moved;
+- the streamable HTTP client was renamed;
+- `AnyUrl` left `mcp.types`;
+- `ClientSession.call_tool` gained an input-required and request-state flow.
+
+Porting the MCP layer is a change of its own, made on a separate branch.

@@ -20,6 +20,7 @@ from mcp import ClientSession
 from mcp.types import (
     GetPromptResult,
     ListPromptsResult,
+    PaginatedRequestParams,
     Prompt,
 )
 
@@ -29,9 +30,11 @@ async def list_prompts(session: ClientSession) -> list[Prompt]:
     prompts: list[Prompt] = []
     cursor: Optional[str] = None
     while True:
-        page: ListPromptsResult = await session.list_prompts(cursor=cursor)
+        page: ListPromptsResult = await session.list_prompts(
+            params=PaginatedRequestParams(cursor=cursor) if cursor else None
+        )
         prompts.extend(page.prompts)
-        cursor = page.nextCursor
+        cursor = page.next_cursor
         if not cursor:
             return prompts
 

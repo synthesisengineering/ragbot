@@ -939,3 +939,40 @@ async def test_step_is_noop_on_terminal_state(
     out = await loop.step(state)
     assert out is state
     assert out.current_state == AgentState.DONE
+
+
+# ---------------------------------------------------------------------------
+# MCP tool results (mcp 2.x types)
+# ---------------------------------------------------------------------------
+
+
+def test_coerce_tool_output_raises_on_an_mcp_tool_error():
+    """A ``CallToolResult`` with ``is_error`` must fail the step, not pass as output.
+
+    mcp 2.x exposes the flag only as ``is_error``; reading the old
+    ``isError`` attribute would return ``None`` and treat the failure as
+    success.
+    """
+    from mcp.types import CallToolResult, TextContent
+
+    from synthesis_engine.agent.loop import _coerce_tool_output
+
+    result = CallToolResult(content=[TextContent(type="text", text="boom")], is_error=True)
+    with pytest.raises(RuntimeError, match="boom"):
+        _coerce_tool_output(result)
+
+
+def test_coerce_tool_output_keeps_text_and_structured_content():
+    from mcp.types import CallToolResult, TextContent
+
+    from synthesis_engine.agent.loop import _coerce_tool_output
+
+    result = CallToolResult(
+        content=[TextContent(type="text", text="ok")],
+        structured_content={"n": 1},
+        is_error=False,
+    )
+    payload = _coerce_tool_output(result)
+    assert payload["is_error"] is False
+    assert payload["text"] == "ok"
+    assert payload["structured_content"] == {"n": 1}

@@ -24,8 +24,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from mcp import ClientSession
-from mcp.shared.context import RequestContext
+from mcp.client.context import ClientRequestContext
 from mcp.types import (
     ElicitRequestParams,
     ElicitResult,
@@ -40,7 +39,7 @@ class ElicitationCallback(Protocol):
 
     async def __call__(
         self,
-        context: RequestContext[ClientSession, None],
+        context: ClientRequestContext,
         params: ElicitRequestParams,
     ) -> ElicitResult | ErrorData:
         """Run the elicitation and return either a result or an error."""
@@ -51,7 +50,7 @@ class RefusingElicitationHandler:
 
     async def __call__(
         self,
-        context: RequestContext[ClientSession, None],
+        context: ClientRequestContext,
         params: ElicitRequestParams,
     ) -> ElicitResult | ErrorData:
         return ErrorData(

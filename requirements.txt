@@ -67,22 +67,27 @@ sse-starlette>=3.4.8
 pydantic>=2.14.2
 
 # --- Model Context Protocol ----------------------------------------------
-# The official Python SDK powers synthesis_engine.mcp (client, six primitives,
-# OAuth, Tasks). Track 1.27+, which carries the Tasks experimental client.
+# The official Python SDK powers synthesis_engine.mcp (client, primitives,
+# OAuth, Tasks, the stdio-to-HTTP proxy) and synthesis_engine.mcp_server.
 #
-# The upper bound is load-bearing, added 2026-09-03 after CI proved a clean
-# install was broken. With `>=1.27.0` alone, pip takes the newest release —
-# now 2.1.1 — and mcp 2.x removed `mcp.client.experimental` and moved `AnyUrl`
-# out of `mcp.types`. That breaks four modules (mcp/tasks.py, mcp/proxy.py,
-# mcp/primitives/resources.py, mcp_server/server.py) at import time, so the
-# suite could not even be collected: six errors before a single test ran.
+# Ragbot moved to mcp 2.x on 2026-11-06. 2.x is a redesign, not a rename: the
+# low-level server takes handlers as constructor arguments and leaves tool-call
+# semantics (schema validation, structured output, error results) to them;
+# the client's experimental tasks namespace is gone, so synthesis_engine.mcp.tasks
+# sends the 2025-11-25 task requests itself; types use snake_case attributes.
+# See docs/security/dependabot-triage-2026-11.md.
 #
-# The tests passed on developer machines only because those already had 1.27.1
-# installed. Anyone cloning the repository and running `make install` got a
-# broken tree, which is the failure mode a floor-only constraint cannot catch.
-# Moving to mcp 2.x is a real migration across those four modules, not a pin
-# change; until that is done deliberately, this stays on the 1.x line.
-mcp>=1.27.1,<2
+# The `<3` ceiling stays for the reason it was added on 2026-09-03: with a
+# floor alone, pip takes the newest major, and the 1.x-to-2.x jump showed a
+# major can break every MCP module at import time.
+mcp>=2.3.0,<3
+# Imported directly: synthesis_engine.mcp.transport builds the httpx2 client
+# that mcp 2.x's Streamable HTTP transport takes, and the MCP server validates
+# tool arguments and results with jsonschema. Both also come in through mcp;
+# declaring them keeps a direct import from depending on another package's
+# dependency list.
+httpx2>=2.16.0
+jsonschema>=4.26.0
 
 # --- Background-task scheduling ------------------------------------------
 # Powers synthesis_engine.tasks.scheduler — the cron-style loop that drives

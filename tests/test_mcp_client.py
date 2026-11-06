@@ -447,8 +447,8 @@ class TestPrimitiveEndpointsAgainstMockedSession:
         )
 
         class FakeSession:
-            async def list_tools(self, cursor=None):
-                return ListToolsResult(tools=[tool], nextCursor=None)
+            async def list_tools(self, *, params=None):
+                return ListToolsResult(tools=[tool], next_cursor=None)
 
         self._mock_entry_with_session(installed, "svr", FakeSession())
 
@@ -458,17 +458,42 @@ class TestPrimitiveEndpointsAgainstMockedSession:
         assert body["server_id"] == "svr"
         assert len(body["tools"]) == 1
         assert body["tools"][0]["name"] == "echo"
+        # The web client reads snake_case keys (web/src/lib/api.ts McpTool).
+        assert body["tools"][0]["input_schema"] == {"type": "object", "properties": {}}
+
+    def test_list_tools_follows_every_page(self, client):
+        from mcp.types import ListToolsResult, Tool
+
+        installed = _install_client([_make_stdio_server("svr")])
+        pages = {
+            None: ListToolsResult(tools=[Tool(name="a", inputSchema={"type": "object"})], next_cursor="p2"),
+            "p2": ListToolsResult(tools=[Tool(name="b", inputSchema={"type": "object"})], next_cursor=None),
+        }
+        seen = []
+
+        class FakeSession:
+            async def list_tools(self, *, params=None):
+                cursor = None if params is None else params.cursor
+                seen.append(cursor)
+                return pages[cursor]
+
+        self._mock_entry_with_session(installed, "svr", FakeSession())
+
+        resp = client.get("/api/mcp/servers/svr/tools")
+        assert resp.status_code == 200, resp.text
+        assert [t["name"] for t in resp.json()["tools"]] == ["a", "b"]
+        assert seen == [None, "p2"]
 
     def test_list_resources_returns_serialized_resources(self, client):
         from mcp.types import ListResourcesResult, Resource
 
         installed = _install_client([_make_stdio_server("svr")])
 
-        resource = Resource(uri="file:///tmp/a.txt", name="a.txt")
+        resource = Resource(uri="file:///tmp/a.txt", name="a.txt", mimeType="text/plain")
 
         class FakeSession:
-            async def list_resources(self, cursor=None):
-                return ListResourcesResult(resources=[resource], nextCursor=None)
+            async def list_resources(self, *, params=None):
+                return ListResourcesResult(resources=[resource], next_cursor=None)
 
         self._mock_entry_with_session(installed, "svr", FakeSession())
 
@@ -478,6 +503,8 @@ class TestPrimitiveEndpointsAgainstMockedSession:
         assert body["server_id"] == "svr"
         assert len(body["resources"]) == 1
         assert body["resources"][0]["uri"] == "file:///tmp/a.txt"
+        # The web client reads snake_case keys (web/src/lib/api.ts McpResource).
+        assert body["resources"][0]["mime_type"] == "text/plain"
 
     def test_list_prompts_returns_serialized_prompts(self, client):
         from mcp.types import ListPromptsResult, Prompt
@@ -487,8 +514,8 @@ class TestPrimitiveEndpointsAgainstMockedSession:
         prompt = Prompt(name="hello", description="Greet")
 
         class FakeSession:
-            async def list_prompts(self, cursor=None):
-                return ListPromptsResult(prompts=[prompt], nextCursor=None)
+            async def list_prompts(self, *, params=None):
+                return ListPromptsResult(prompts=[prompt], next_cursor=None)
 
         self._mock_entry_with_session(installed, "svr", FakeSession())
 

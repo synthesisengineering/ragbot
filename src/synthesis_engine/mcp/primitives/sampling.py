@@ -20,11 +20,9 @@ without surprises.
 
 from __future__ import annotations
 
-import abc
 from typing import Protocol, runtime_checkable
 
-from mcp import ClientSession
-from mcp.shared.context import RequestContext
+from mcp.client.context import ClientRequestContext
 from mcp.types import (
     CreateMessageRequestParams,
     CreateMessageResult,
@@ -41,7 +39,7 @@ class SamplingCallback(Protocol):
 
     async def __call__(
         self,
-        context: RequestContext[ClientSession, None],
+        context: ClientRequestContext,
         params: CreateMessageRequestParams,
     ) -> CreateMessageResult | ErrorData:
         """Run the sampling request and return either a result or an error."""
@@ -58,7 +56,7 @@ class RefusingSamplingHandler:
 
     async def __call__(
         self,
-        context: RequestContext[ClientSession, None],
+        context: ClientRequestContext,
         params: CreateMessageRequestParams,
     ) -> CreateMessageResult | ErrorData:
         return ErrorData(

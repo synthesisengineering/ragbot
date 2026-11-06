@@ -53,7 +53,7 @@ from mcp.types import (
 )
 
 from . import tasks as mcp_tasks
-from .config import MCPConfig, MCPServerConfig, load_mcp_config
+from .config import MCPConfig, load_mcp_config
 from .primitives import (
     ElicitationCallback,
     RootsProvider,

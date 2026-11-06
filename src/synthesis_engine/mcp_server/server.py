@@ -11,15 +11,19 @@ that server to an external client:
   trusted.
 
 * :meth:`RagbotMCPServer.serve_http` — serves the same handlers over
-  Streamable HTTP (the 2025-11-25 MCP transport). Bearer-token auth is
-  enforced via the per-server config at ``~/.synthesis/mcp-server.yaml``.
-  The handler raises :class:`MCPServerAuthError` and refuses to start
-  when the config is missing or malformed.
+  Streamable HTTP at ``/mcp``. Bearer-token auth is enforced via the
+  per-server config at ``~/.synthesis/mcp-server.yaml``. The method
+  raises :class:`MCPServerAuthError` and refuses to start when the
+  config is missing or malformed.
 
-The class is intentionally a thin shell. Every protocol-level concern
-(transport, framing, JSON validation, schema enforcement) is the SDK's
-responsibility. Every tool-level concern (dispatch, permission, policy)
-lives in :mod:`.tools`. Every resource-level concern (URI parsing,
+The class is a thin shell. Transport, framing and JSON-RPC are the
+SDK's responsibility. The mcp 2.x low-level server leaves tool-call
+semantics to the handler, so this module validates arguments against
+each tool's input schema, returns structured content alongside its JSON
+text, validates it against the output schema, and turns failures into
+``is_error`` results — the behaviour the 1.x SDK supplied implicitly.
+Every tool-level concern (dispatch, permission, policy) lives in
+:mod:`.tools`. Every resource-level concern (URI parsing,
 content materialisation) lives in :mod:`.resources`. The server is the
 glue that puts those layers behind one MCP-compliant socket.
 """
@@ -27,10 +31,11 @@ glue that puts those layers behind one MCP-compliant socket.
 from __future__ import annotations
 
 import asyncio
-import contextvars
+import base64
+import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import (
     Any,
     Awaitable,
@@ -38,16 +43,28 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Mapping,
     Optional,
     Tuple,
 )
 
+import jsonschema
+from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
+from mcp.shared.exceptions import MCPError
 from mcp.types import (
-    AnyUrl,
-    Resource,
+    INVALID_PARAMS,
+    BlobResourceContents,
+    CallToolRequestParams,
+    CallToolResult,
+    ListResourcesResult,
+    ListToolsResult,
+    PaginatedRequestParams,
+    ReadResourceRequestParams,
+    ReadResourceResult,
     TextContent,
+    TextResourceContents,
     Tool,
 )
 
@@ -72,17 +89,6 @@ from .tools import (
 
 
 logger = logging.getLogger(__name__)
-
-
-# ContextVar holding the current request's bearer-token entry. The
-# Streamable-HTTP transport sets it inside its ASGI handler before
-# invoking the MCP session's request loop, so the tool handlers can pick
-# up the per-request entry without changing the SDK's call_tool
-# signature. Stdio mode never sets it, which is how the tool dispatcher
-# distinguishes "no auth needed" from "bearer present."
-_CURRENT_BEARER: contextvars.ContextVar[Optional[BearerToken]] = (
-    contextvars.ContextVar("ragbot_mcp_bearer", default=None)
-)
 
 
 # ---------------------------------------------------------------------------
@@ -164,14 +170,25 @@ class RagbotMCPServer:
         version: str = "1.0.0",
     ) -> None:
         self._deps = dependencies
-        self._server: Server = Server(name=name, version=version)
+        self._tools_by_name: Dict[str, Tool] = {t.name: t for t in TOOL_DEFINITIONS}
+        # Set by :meth:`asgi_app_factory`. HTTP requests resolve their bearer
+        # token against it; stdio and in-process sessions never consult it.
+        self._auth_config: Optional[MCPServerAuthConfig] = None
         self._resource_provider = ResourceProvider(
             list_workspaces=dependencies.list_workspaces,
             skills_for=lambda ws: list(dependencies.skills_visible_for(ws)),
             routing_policy_for=dependencies.routing_policies,
             audit_limit=dependencies.audit_limit,
         )
-        self._register_handlers()
+        self._server: Server = Server(
+            name=name,
+            version=version,
+            get_tool_input_schema=self._tool_input_schema,
+            on_list_tools=self._on_list_tools,
+            on_call_tool=self._on_call_tool,
+            on_list_resources=self._on_list_resources,
+            on_read_resource=self._on_read_resource,
+        )
 
     # ------ public introspection -------------------------------------------
 
@@ -179,9 +196,8 @@ class RagbotMCPServer:
     def server(self) -> Server:
         """The underlying SDK :class:`Server` instance.
 
-        Exposed so tests and the HTTP transport can reach into it for
-        capabilities, initialisation options, and the in-memory test
-        helper from ``mcp.shared.memory``.
+        Exposed so tests can connect to it in-process with
+        ``mcp.Client(server.server)`` and inspect its capabilities.
         """
         return self._server
 
@@ -193,42 +209,115 @@ class RagbotMCPServer:
         """Return the static tool definitions surfaced by this server."""
         return TOOL_DEFINITIONS
 
-    # ------ handler registration -------------------------------------------
+    # ------ protocol handlers ----------------------------------------------
 
-    def _register_handlers(self) -> None:
-        """Wire the SDK decorators to dispatch into this module's helpers."""
-        server = self._server
+    def _tool_input_schema(self, name: str) -> Optional[Mapping[str, Any]]:
+        tool = self._tools_by_name.get(name)
+        return None if tool is None else tool.input_schema
 
-        @server.list_tools()
-        async def _list_tools() -> List[Tool]:  # pragma: no cover - small shim
-            return list(TOOL_DEFINITIONS)
+    async def _on_list_tools(
+        self, ctx: ServerRequestContext[Any], params: Optional[PaginatedRequestParams]
+    ) -> ListToolsResult:
+        return ListToolsResult(tools=list(TOOL_DEFINITIONS))
 
-        @server.call_tool()
-        async def _call_tool(
-            name: str, arguments: Dict[str, Any]
-        ) -> Dict[str, Any]:
-            ctx = self._build_dispatch_context(_CURRENT_BEARER.get())
-            try:
-                return await dispatch_tool(name, arguments or {}, ctx)
-            except ToolDispatchError as exc:
-                # Surface the dispatch error as a tool error result so
-                # the SDK turns it into a CallToolResult(isError=True).
-                # We re-raise as a plain Exception with the same message
-                # so the SDK's wrapper does that translation.
-                raise RuntimeError(f"[{exc.code}] {exc}") from exc
+    async def _on_call_tool(
+        self, ctx: ServerRequestContext[Any], params: CallToolRequestParams
+    ) -> CallToolResult:
+        """Validate, dispatch and package one ``tools/call``.
 
-        @server.list_resources()
-        async def _list_resources() -> List[Resource]:
-            return list_all_resources(self._resource_provider)
-
-        @server.read_resource()
-        async def _read_resource(uri: AnyUrl) -> Iterable[Any]:
-            try:
-                return list(
-                    read_resource_contents(self._resource_provider, str(uri))
+        Every failure becomes an ``is_error`` result rather than a JSON-RPC
+        error, so a client sees the tool's own message: schema violations,
+        dispatch refusals (``[code] message``) and unexpected exceptions.
+        """
+        name = params.name
+        arguments = params.arguments or {}
+        tool = self._tools_by_name.get(name)
+        try:
+            if tool is not None:
+                try:
+                    jsonschema.validate(instance=arguments, schema=tool.input_schema)
+                except jsonschema.ValidationError as exc:
+                    return _error_result(f"Input validation error: {exc.message}")
+            bearer, authorized = self._bearer_for(ctx)
+            if not authorized:
+                return _error_result(
+                    "[unauthorized] Missing or invalid bearer token for this request."
                 )
-            except LookupError as exc:
-                raise ValueError(str(exc)) from exc
+            dispatch_ctx = self._build_dispatch_context(bearer)
+            try:
+                structured = await dispatch_tool(name, arguments, dispatch_ctx)
+            except ToolDispatchError as exc:
+                return _error_result(f"[{exc.code}] {exc}")
+            if tool is not None and tool.output_schema is not None:
+                try:
+                    jsonschema.validate(instance=structured, schema=tool.output_schema)
+                except jsonschema.ValidationError as exc:
+                    return _error_result(f"Output validation error: {exc.message}")
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(structured, indent=2))],
+                structured_content=structured,
+                is_error=False,
+            )
+        except Exception as exc:
+            logger.exception("tool %s failed", name)
+            return _error_result(str(exc))
+
+    async def _on_list_resources(
+        self, ctx: ServerRequestContext[Any], params: Optional[PaginatedRequestParams]
+    ) -> ListResourcesResult:
+        return ListResourcesResult(resources=list_all_resources(self._resource_provider))
+
+    async def _on_read_resource(
+        self, ctx: ServerRequestContext[Any], params: ReadResourceRequestParams
+    ) -> ReadResourceResult:
+        uri = str(params.uri)
+        try:
+            items = list(read_resource_contents(self._resource_provider, uri))
+        except LookupError as exc:
+            raise MCPError(code=INVALID_PARAMS, message=str(exc)) from exc
+        contents: List[TextResourceContents | BlobResourceContents] = []
+        for item in items:
+            if isinstance(item.content, bytes):
+                contents.append(
+                    BlobResourceContents(
+                        uri=uri,
+                        blob=base64.b64encode(item.content).decode("ascii"),
+                        mime_type=item.mime_type or "application/octet-stream",
+                        _meta=item.meta,
+                    )
+                )
+            else:
+                contents.append(
+                    TextResourceContents(
+                        uri=uri,
+                        text=item.content,
+                        mime_type=item.mime_type or "text/plain",
+                        _meta=item.meta,
+                    )
+                )
+        return ReadResourceResult(contents=contents)
+
+    def _bearer_for(
+        self, ctx: ServerRequestContext[Any]
+    ) -> Tuple[Optional[BearerToken], bool]:
+        """Resolve the bearer token for one request; return ``(token, authorized)``.
+
+        ``ctx.request`` is the HTTP request on the Streamable HTTP
+        transport and ``None`` for stdio and in-process sessions. Stdio is
+        process-local trust, so it dispatches with no token. An HTTP
+        request must carry a token that resolves against the auth config;
+        the ASGI layer already refuses requests without one, and this
+        check fails closed in case a request reaches the handler some
+        other way.
+        """
+        request = ctx.request
+        if request is None:
+            return None, True
+        if self._auth_config is None:
+            return None, False
+        headers = getattr(request, "headers", None) or {}
+        bearer = self._auth_config.authenticate_bearer(headers.get("authorization"))
+        return bearer, bearer is not None
 
     def _build_dispatch_context(
         self, bearer: Optional[BearerToken]
@@ -256,9 +345,8 @@ class RagbotMCPServer:
 
         Stdio is process-local: the client (Claude Code, Cursor, etc.)
         spawned this process and shares its security boundary. No
-        bearer token is consulted; the current bearer ContextVar is
-        left at its default ``None`` so the tool dispatcher recognises
-        the stdio-trust path.
+        bearer token is consulted; requests carry no HTTP request, which
+        is how :meth:`_bearer_for` recognises the stdio-trust path.
         """
         async with stdio_server() as (read_stream, write_stream):
             await self._server.run(
@@ -298,13 +386,10 @@ class RagbotMCPServer:
                 be loaded. Fail-closed; the server does not start.
 
         Note:
-            The Streamable HTTP transport is wired through
-            :class:`StreamableHTTPSessionManager`. The server is
-            mounted under an ASGI app inside this method so a deployer
-            can reuse it behind their own HTTP layer (FastAPI, Hypercorn,
-            etc.). The default in-process Uvicorn binding is the
-            simplest standalone path. Use :meth:`asgi_app_factory` if
-            you need to embed the server inside an existing ASGI app.
+            The endpoint is ``http://<host>:<port>/mcp``. The default
+            in-process Uvicorn binding is the simplest standalone path;
+            use :meth:`asgi_app_factory` to embed the server inside an
+            existing ASGI app.
         """
         if auth_config is None:
             cfg_path = (
@@ -329,7 +414,7 @@ class RagbotMCPServer:
         # :meth:`asgi_app_factory` and never imports uvicorn here.
         import uvicorn
 
-        app = self.asgi_app_factory(auth_config=auth_config)
+        app = self.asgi_app_factory(auth_config=auth_config, host=host)
         config = uvicorn.Config(
             app=app, host=host, port=port, log_level="info"
         )
@@ -337,34 +422,39 @@ class RagbotMCPServer:
         await server.serve()
 
     def asgi_app_factory(
-        self, *, auth_config: MCPServerAuthConfig
+        self,
+        *,
+        auth_config: MCPServerAuthConfig,
+        host: str = "127.0.0.1",
+        path: str = "/mcp",
     ) -> Callable[..., Awaitable[None]]:
-        """Return an ASGI callable that serves this MCP server.
+        """Return an ASGI callable that serves this MCP server at ``path``.
 
-        The factory wraps the Streamable HTTP transport with a
-        bearer-token middleware. The middleware reads the
-        ``Authorization`` header, resolves it against ``auth_config``,
-        and stores the resolved :class:`BearerToken` in the
-        :data:`_CURRENT_BEARER` ContextVar before forwarding to the
-        transport's own ASGI handler. Unauthenticated requests get a
-        401 with a clear remediation message.
+        The SDK's Streamable HTTP app owns the transport and its session
+        manager lifecycle (the ASGI lifespan starts and stops it). This
+        factory puts a bearer-token check in front of it: requests whose
+        ``Authorization`` header does not resolve against ``auth_config``
+        get a 401 with a clear remediation message and never reach the
+        transport. The tool handler resolves the same header again for
+        each call to apply the token's ``allowed_tools``.
+
+        ``host`` is the address the server binds to; the SDK uses it for
+        DNS-rebinding protection on local binds.
         """
-        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-
-        manager = StreamableHTTPSessionManager(app=self._server)
+        self._auth_config = auth_config
+        inner = self._server.streamable_http_app(
+            streamable_http_path=path, host=host
+        )
 
         async def asgi_app(scope: Dict[str, Any], receive: Any, send: Any) -> None:
             if scope.get("type") != "http":
-                await manager.handle_request(scope, receive, send)
+                await inner(scope, receive, send)
                 return
             headers = {
                 k.decode("latin-1").lower(): v.decode("latin-1")
                 for k, v in (scope.get("headers") or [])
             }
-            bearer = auth_config.authenticate_bearer(
-                headers.get("authorization")
-            )
-            if bearer is None:
+            if auth_config.authenticate_bearer(headers.get("authorization")) is None:
                 body = (
                     b'{"error":"unauthorized",'
                     b'"detail":"Missing or invalid bearer token. '
@@ -380,37 +470,18 @@ class RagbotMCPServer:
                         ],
                     }
                 )
-                await send(
-                    {"type": "http.response.body", "body": body}
-                )
+                await send({"type": "http.response.body", "body": body})
                 return
-            token_var_token = _CURRENT_BEARER.set(bearer)
-            try:
-                await manager.handle_request(scope, receive, send)
-            finally:
-                _CURRENT_BEARER.reset(token_var_token)
+            await inner(scope, receive, send)
 
         return asgi_app
 
-    # ------ test helpers ----------------------------------------------------
 
-    def set_current_bearer_for_test(
-        self, bearer: Optional[BearerToken]
-    ) -> contextvars.Token:
-        """Install ``bearer`` as the current request's token.
-
-        Tests use this to simulate a per-request HTTP context without
-        spinning up the actual ASGI transport. Returns the ContextVar
-        token so the test can call :func:`contextvars.ContextVar.reset`
-        afterwards.
-        """
-        return _CURRENT_BEARER.set(bearer)
-
-    @staticmethod
-    def reset_current_bearer_for_test(token: contextvars.Token) -> None:
-        """Restore the previous ContextVar state set by
-        :meth:`set_current_bearer_for_test`."""
-        _CURRENT_BEARER.reset(token)
+def _error_result(message: str) -> CallToolResult:
+    """A ``tools/call`` result reporting ``message`` as a tool error."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=message)], is_error=True
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +505,7 @@ def make_agent_run_starter_from_loop(
     store, kick off ``drive_to_terminal`` as a background asyncio task,
     and return the new task id.
     """
-    from ..agent import AgentState, GraphState  # local import to avoid cycle
+    from ..agent import GraphState  # local import to avoid cycle
 
     async def _starter(
         workspaces: Tuple[str, ...],

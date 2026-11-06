@@ -26,7 +26,7 @@ import abc
 from typing import Optional, Sequence
 
 from mcp import ClientSession
-from mcp.shared.context import RequestContext
+from mcp.client.context import ClientRequestContext
 from mcp.types import ListRootsResult, Root
 
 
@@ -38,7 +38,7 @@ class RootsProvider(abc.ABC):
         """Return the current root list."""
 
     async def list_roots_callback(
-        self, context: RequestContext[ClientSession, None]
+        self, context: ClientRequestContext
     ) -> ListRootsResult:
         """SDK-compatible callback: wraps :meth:`list_roots` into a result."""
         roots = await self.list_roots()

@@ -9,7 +9,7 @@ The server itself and its tool dispatch are fully built and unit-tested (`tests/
 | Transport | CLI command | Auth | Who uses it |
 |---|---|---|---|
 | **stdio** | `ragbot mcp serve` | None — process-local trust | Claude Code, Cursor, and other desktop clients that spawn the server as a subprocess |
-| **HTTP/SSE** | *(no CLI subcommand yet — `RagbotMCPServer.serve_http()` exists in code but isn't wired to `ragbot mcp`)* | Bearer token via `~/.synthesis/mcp-server.yaml` | Remote clients, or anything that can't spawn a local process |
+| **Streamable HTTP** | *(no CLI subcommand yet — `RagbotMCPServer.serve_http()` exists in code but isn't wired to `ragbot mcp`)*; endpoint `http://<host>:<port>/mcp` | Bearer token via `~/.synthesis/mcp-server.yaml`, checked on every request and again per tool call against the token's `allowed_tools` | Remote clients, or anything that can't spawn a local process |
 
 **Important correction to a common assumption:** the bearer-token config at `~/.synthesis/mcp-server.yaml` is **not** needed to register `ragbot mcp serve` with Claude Code. Stdio is process-local — whatever spawned the process (Claude Code) is the trust boundary, and `RagbotMCPServer.serve_stdio()` never consults the bearer-token config at all (see `synthesis_engine/mcp_server/server.py::serve_stdio`). The token file only matters if/when the HTTP/SSE transport gets its own CLI subcommand — that's a real follow-up, not something this change builds, and there is no token to generate for the stdio path described below.
 

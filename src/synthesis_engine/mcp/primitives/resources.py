@@ -22,11 +22,11 @@ from mcp import ClientSession
 from mcp.types import (
     ListResourcesResult,
     ListResourceTemplatesResult,
+    PaginatedRequestParams,
     ReadResourceResult,
     Resource,
     ResourceTemplate,
 )
-from pydantic import AnyUrl
 
 
 async def list_resources(session: ClientSession) -> list[Resource]:
@@ -34,9 +34,11 @@ async def list_resources(session: ClientSession) -> list[Resource]:
     resources: list[Resource] = []
     cursor: Optional[str] = None
     while True:
-        page: ListResourcesResult = await session.list_resources(cursor=cursor)
+        page: ListResourcesResult = await session.list_resources(
+            params=PaginatedRequestParams(cursor=cursor) if cursor else None
+        )
         resources.extend(page.resources)
-        cursor = page.nextCursor
+        cursor = page.next_cursor
         if not cursor:
             return resources
 
@@ -47,10 +49,10 @@ async def list_resource_templates(session: ClientSession) -> list[ResourceTempla
     cursor: Optional[str] = None
     while True:
         page: ListResourceTemplatesResult = await session.list_resource_templates(
-            cursor=cursor
+            params=PaginatedRequestParams(cursor=cursor) if cursor else None
         )
-        templates.extend(page.resourceTemplates)
-        cursor = page.nextCursor
+        templates.extend(page.resource_templates)
+        cursor = page.next_cursor
         if not cursor:
             return templates
 
@@ -62,7 +64,7 @@ async def read_resource(session: ClientSession, uri: str) -> ReadResourceResult:
     blocks — text or binary — that the caller renders or hands off to a
     downstream LLM context window.
     """
-    return await session.read_resource(AnyUrl(uri))
+    return await session.read_resource(uri)
 
 
 async def subscribe_resource(session: ClientSession, uri: str) -> None:
@@ -73,12 +75,12 @@ async def subscribe_resource(session: ClientSession, uri: str) -> None:
     via the SDK's ``message_handler`` to receive them; the substrate's
     higher-level client wires this for you.
     """
-    await session.subscribe_resource(AnyUrl(uri))
+    await session.subscribe_resource(uri)
 
 
 async def unsubscribe_resource(session: ClientSession, uri: str) -> None:
     """Release a previously-established subscription on ``uri``."""
-    await session.unsubscribe_resource(AnyUrl(uri))
+    await session.unsubscribe_resource(uri)
 
 
 __all__ = [

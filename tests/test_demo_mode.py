@@ -189,3 +189,52 @@ class TestDemoConstants:
         # same vector store.
         assert DEMO_SKILLS_WORKSPACE_NAME != "skills"
         assert DEMO_SKILLS_WORKSPACE_NAME == "demo_skills"
+
+
+# ---------------------------------------------------------------------------
+# First-run auto-index (src/ragbot.py::_ensure_demo_indexed)
+# ---------------------------------------------------------------------------
+
+
+def _load_cli():
+    """Load src/ragbot.py by path: ``import ragbot`` resolves to the package
+    of the same name, not the CLI script (see tests/test_mcp_cli_wiring.py)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "ragbot_cli_demo_under_test", os.path.join(_SRC, "ragbot.py"),
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestEnsureDemoIndexed:
+    def test_indexes_bundled_content_and_skills_when_empty(self):
+        from unittest.mock import patch
+
+        import rag
+
+        cli = _load_cli()
+        with patch.object(rag, 'get_index_status', return_value=(False, 0)), \
+             patch.object(rag, 'index_content', return_value={'indexed': 1}) as index_content, \
+             patch.object(rag, 'index_skills', return_value={}) as index_skills:
+            cli._ensure_demo_indexed()
+
+        indexed = [call.args[0] for call in index_content.call_args_list]
+        assert indexed and set(indexed) == {DEMO_WORKSPACE_NAME}
+        assert index_skills.call_args.kwargs['workspace_name'] == DEMO_SKILLS_WORKSPACE_NAME
+
+    def test_skips_when_already_indexed(self):
+        from unittest.mock import patch
+
+        import rag
+
+        cli = _load_cli()
+        with patch.object(rag, 'get_index_status', return_value=(True, 4)), \
+             patch.object(rag, 'index_content') as index_content, \
+             patch.object(rag, 'index_skills') as index_skills:
+            cli._ensure_demo_indexed()
+
+        index_content.assert_not_called()
+        index_skills.assert_not_called()

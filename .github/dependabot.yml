@@ -9,8 +9,9 @@
 #
 # Triage policy: real-exposure alerts get pin-bumped on the next manual
 # pass; transitive-only alerts get overrides in web/package.json
-# (preferred) or ignores here (when an override is infeasible). The full
-# decision log lives at docs/security/dependabot-triage-2026-05.md.
+# (preferred) or ignores here (when an override is infeasible). The
+# decision log is one file per pass, docs/security/dependabot-triage-YYYY-MM.md;
+# the latest is dependabot-triage-2026-11.md.
 #
 # When new alerts arrive, do not add an ignore entry without first
 # verifying the override path is closed. Silent dismissal is forbidden.

@@ -52,7 +52,7 @@ google-genai>=3.0.0
 # filelock below 4, and filelock 3.x carries 13 CVEs fixed only in 4.x. pip
 # installs the candidate today and moves to 1.109.0 itself once it is released,
 # since the final release satisfies this floor.
-litellm>=1.109.0rc1
+litellm>=1.111.0.dev1
 # Transitive (torch, huggingface_hub, litellm), declared so the patched major is
 # the floor (4.2.1 fixed the CVEs that 3.32.7 carries; 4.2.9 is the latest).
 filelock>=4.2.9

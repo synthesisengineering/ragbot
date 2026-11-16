@@ -42,7 +42,7 @@ openai>=3.46.0,<4
 # other dependency required it, but it pinned google-ai-generativelanguage
 # 0.6.15, which held protobuf below 6 and google-api-core, proto-plus and
 # grpcio-status at old releases.
-google-genai>=3.0.0
+google-genai>=3.3.0
 # Capability-only registration must preserve missing prices and explicit effort.
 # Verified offline transformation: docs/model-catalog-2026-11-06.yaml.
 # 1.108.0 is the first release that accepts openai 3 (see above).

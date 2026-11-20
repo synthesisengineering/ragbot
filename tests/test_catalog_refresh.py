@@ -285,8 +285,10 @@ def _restore_map_entries(model, saved):
 def test_model_missing_from_litellms_map_still_takes_its_effort(model, monkeypatch):
  """LiteLLM's bundled map can lag a release.
 
- On 2026-11-20 the newest stable LiteLLM (1.110.2) lacked GPT-6.2 Astra and
- Sol, and 1.108.1 lacked GPT-6.1 Terra. Without a row LiteLLM refuses xhigh.
+ On 2026-11-20 the map bundled with the newest stable LiteLLM (1.110.2) had no
+ row for GPT-6.2 Astra or Sol, as 1.108.1's had none for GPT-6.1 Terra. LiteLLM
+ falls back to that map when it cannot download its current one, and without a
+ row it refuses xhigh.
  Ragbot registers the catalog's verified capabilities, so the request passes
  at the effort asked for, with no price invented.
  """
@@ -313,7 +315,8 @@ def test_model_missing_from_litellms_map_still_takes_its_effort(model, monkeypat
 @pytest.mark.parametrize('model', ['gemini/gemini-4-neon', 'gemini/gemini-4-hydrogen'])
 def test_gemini_xhigh_survives_a_map_without_the_model(model, monkeypatch):
  """LiteLLM sends Gemini's xhigh thinking level only for a model its map marks
- supports_xhigh_reasoning_effort, and stable 1.110.2 has no row for Neon.
+ supports_xhigh_reasoning_effort, and the map bundled with stable 1.110.2 has
+ no row for Neon.
 
  Ragbot registers that capability from the catalog, so Neon and Hydrogen keep
  xhigh where the bundled map lacks them.

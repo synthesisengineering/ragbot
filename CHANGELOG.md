@@ -38,11 +38,12 @@ LiteLLM without an error.
   `litellm.drop_params = True`, and LiteLLM combines the two with `or`, so the global
   flag won: an unmapped level would have been dropped and the request sent at the
   provider's default effort. Ragbot registers each catalog model's capabilities before
-  the call, which covered every model until now, so the guard had never been needed.
-  It matters with this release, because LiteLLM's latest stable map lacks GPT-6.2,
-  Fable 5.2 and Gemini 4 Neon. The backend no longer sets the global flag; models
-  without a contract, such as local Ollama models, carry `drop_params=True` on each
-  request instead.
+  the call, and that has covered every model so far, so no request is known to have
+  lost its effort. The gap is real with this release: the model map bundled with
+  LiteLLM 1.110.2, which LiteLLM uses when it cannot download its current map, has no
+  row for GPT-6.2, Fable 5.2 or Gemini 4 Carbon and Neon. The backend no longer sets
+  the global flag; models without a contract, such as local Ollama models, carry
+  `drop_params=True` on each request instead.
 - **Local thinking documentation.** `CONFIGURE.md` and the sizing matrix still said
   Gemma 4 takes no thinking parameter. Since 4.0.1 every Gemma 4 entry declares hybrid
   thinking, and the 31B flagship defaults to `medium`.

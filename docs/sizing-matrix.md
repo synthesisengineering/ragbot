@@ -2,7 +2,7 @@
 
 This document maps each open-weights model in Ragbot's `engines.yaml` to the Mac hardware that runs it, with memory footprints and quantization guidance. It answers one question: *will this model run usefully on my Mac, and at what precision?*
 
-The lineup and every size below were verified on November 6, 2026 against the Ollama library tag pages and the model cards (sources in [`model-catalog-2026-11-06.yaml`](model-catalog-2026-11-06.yaml)). "Default tag" is the published Ollama download size of the exact tag `engines.yaml` names (Q4_K_M for most models); FP16 and Q8 are derived from parameter counts (about 2 and 1.08 bytes per parameter). Ollama on Apple Silicon is the assumed runtime.
+The lineup and every size below were verified on November 6, 2026 against the Ollama library tag pages and the model cards (sources in [`model-catalog-2026-11-20.yaml`](model-catalog-2026-11-20.yaml)). "Default tag" is the published Ollama download size of the exact tag `engines.yaml` names (Q4_K_M for most models); FP16 and Q8 are derived from parameter counts (about 2 and 1.08 bytes per parameter). Ollama on Apple Silicon is the assumed runtime.
 
 ---
 
@@ -305,7 +305,7 @@ Ragbot's local path runs through Ollama (the `ollama_chat/` LiteLLM prefix). On 
 
 ### Thinking modes on local models
 
-Qwen3.8 27B, Qwen3.8 Flash-Next and Nemotron 3.5 Super declare hybrid thinking in `engines.yaml`. Ragbot sends no thinking parameter by default, which leaves each model's own default (Qwen3.8 thinks by default); an explicit effort reaches Ollama as its `think` option. Gemma 4 thinking is enabled through its chat template, and Muse Glimmer's reasoning strength is set in the system prompt, so neither takes a thinking parameter.
+Gemma 4, Qwen3.8 27B, Qwen3.8 Flash-Next and Nemotron 3.5 Super declare hybrid thinking in `engines.yaml`. Ragbot sends no thinking parameter by default, which leaves each model's own default (Qwen3.8 and Gemma 4 12B, 26B and 31B think by default; Gemma 4 E4B does not); the local flagship, Gemma 4 31B, defaults to `medium`. An explicit effort reaches Ollama as its `think` option, and `off` sends `think: false`. Muse Glimmer's reasoning strength is set in the system prompt, so it takes no thinking parameter.
 
 ### KV cache quantization
 

@@ -140,7 +140,7 @@ Both backends honour the same provider request rules (OpenAI's `max_completion_t
 
 ### Reasoning / thinking modes
 
-Every cloud model in `engines.yaml` carries a strict reasoning contract: its effort defaults to the catalog value (for example `high` for Claude Fable 5.1 and Sonnet 5.5, `medium` for GPT-6.1 Sol and Gemini 4 Argon, `minimal` for Gemini 3.5 Flash-Lite), and an override must be one of the model's listed levels — an unsupported value is an error rather than a silent substitution. Local models with hybrid thinking (Qwen3.8, Nemotron 3.5 Super) send no thinking parameter unless you set one, which leaves the model's own default. Models without a `thinking` block (Gemma 4, Muse Glimmer, Mistral Medium 3.5) ignore the parameter.
+Every cloud model in `engines.yaml` carries a strict reasoning contract: its effort defaults to the catalog value (for example `high` for Claude Fable 5.2, Sonnet 5.5, Gemini 4 Neon and Gemini 4 Hydrogen, `medium` for GPT-6.2 Sol and Gemini 4 Carbon, `minimal` for Gemini 3.5 Flash-Lite), and an override must be one of the model's listed levels — an unsupported value is an error rather than a silent substitution. Local models with hybrid thinking (Gemma 4, Qwen3.8, Nemotron 3.5 Super) send no thinking parameter unless you set one, which leaves the model's own default; the local flagship, Gemma 4 31B, defaults to `medium`. Models without a `thinking` block (Muse Glimmer, Mistral Medium 3.5) ignore the parameter.
 
 ```bash
 # Per-call override

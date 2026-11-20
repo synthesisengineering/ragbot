@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { thinkingOptions } from '../src/lib/thinking';
 import { SettingsPanel } from '../src/components/SettingsPanel';
 import type { ModelInfo } from '../src/lib/api';
-const sample = { id: 'openai/gpt-6-astra', name: 'gpt-6-astra', provider: 'openai', context_window: 1050000, supports_streaming: true, supports_system_role: true, supports_thinking: true, thinking: { strict: true, modes: ['low', 'medium', 'high', 'xhigh', 'max'], default: 'medium' } } satisfies ModelInfo;
+const sample = { id: 'openai/gpt-6.2-astra', name: 'gpt-6.2-astra', provider: 'openai', context_window: 1050000, supports_streaming: true, supports_system_role: true, supports_thinking: true, thinking: { strict: true, modes: ['low', 'medium', 'high', 'xhigh', 'max'], default: 'medium' } } satisfies ModelInfo;
 vi.mock('../src/lib/api', () => ({
   getModels: async () => ({ models: [sample], default_model: sample.id }),
   getWorkspaces: async () => [], getConfig: async () => ({}),

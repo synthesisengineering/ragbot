@@ -19,7 +19,7 @@
 #
 # Naming history: v1.x used frontier/efficient/light. Renamed 2026-07-14
 # because the industry uses "frontier" to mean the whole current generation
-# (OpenAI applied it to the whole GPT-5.6 line), colliding with our
+# (OpenAI applied it to all three GPT-5.6 models), colliding with our
 # top-rung meaning. Full rationale: references/naming-rationale.md.
 #
 # Per role and provider, the role key holds an ORDERED PREFERENCE LIST:
@@ -45,39 +45,40 @@
 # Identifier and selector provenance: references/catalog-verification.yaml.
 
 version: 2
-updated: '2026-11-06'
+updated: '2026-11-20'
 verification: references/catalog-verification.yaml
 providers:
   anthropic:
-    verified: '2026-11-06'
+    verified: '2026-11-20'
     identifier_namespace: provider_api
     endpoint_availability: unknown
     judgment:
-    - claude-fable-5-1
+    - claude-fable-5-2
     - claude-opus-5-5
     routine:
     - claude-sonnet-5-5
     bulk:
     - claude-haiku-5-5
   openai:
-    verified: '2026-11-06'
+    verified: '2026-11-20'
     identifier_namespace: provider_api
     endpoint_availability: unknown
     judgment:
-    - gpt-6-astra
+    - gpt-6.2-astra
     routine:
-    - gpt-6.1-sol
+    - gpt-6.2-sol
     - gpt-6.1-terra
     bulk:
     - gpt-6-luna
   google:
-    verified: '2026-11-06'
+    verified: '2026-11-20'
     identifier_namespace: litellm_gemini
     endpoint_availability: unknown
     judgment:
-    - gemini/gemini-4-argon
+    - gemini/gemini-4-carbon
+    - gemini/gemini-4-neon
     routine:
-    - gemini/gemini-3.8-flash
+    - gemini/gemini-4-hydrogen
     bulk:
     - gemini/gemini-3.5-flash-lite
   ollama:
@@ -100,6 +101,7 @@ providers:
 clients:
   gemini-api:
     google:
-      gemini/gemini-4-argon: gemini-4-argon
-      gemini/gemini-3.8-flash: gemini-3.8-flash
+      gemini/gemini-4-carbon: gemini-4-carbon
+      gemini/gemini-4-neon: gemini-4-neon
+      gemini/gemini-4-hydrogen: gemini-4-hydrogen
       gemini/gemini-3.5-flash-lite: gemini-3.5-flash-lite

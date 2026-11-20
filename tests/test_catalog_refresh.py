@@ -1,7 +1,7 @@
 """Offline acceptance of the model catalog through actual consumer modules.
 
-Every cloud model in engines.yaml (verified 2026-11-06; sources in
-docs/model-catalog-2026-11-06.yaml) is checked through the loader, the chat
+Every cloud model in engines.yaml (verified 2026-11-20; sources in
+docs/model-catalog-2026-11-20.yaml) is checked through the loader, the chat
 core, both LLM backends, and the real provider SDKs serializing against a mock
 transport. Nothing here makes a network call.
 """
@@ -16,27 +16,31 @@ from synthesis_engine.llm.litellm_backend import _build_completion_kwargs
 from ragbot.core import _resolve_thinking_for_model
 
 MODELS = {
- 'openai/gpt-6-astra': ('judgment', 922000, 128000),
- 'openai/gpt-6.1-sol': ('routine', 922000, 128000),
+ 'openai/gpt-6.2-astra': ('judgment', 922000, 128000),
+ 'openai/gpt-6.2-sol': ('routine', 922000, 128000),
  'openai/gpt-6.1-terra': ('routine', 922000, 128000),
  'openai/gpt-6-luna': ('bulk', 922000, 128000),
- 'anthropic/claude-fable-5-1': ('judgment', 1000000, 128000),
+ 'anthropic/claude-fable-5-2': ('judgment', 1000000, 128000),
  'anthropic/claude-opus-5-5': ('judgment', 1000000, 128000),
  'anthropic/claude-sonnet-5-5': ('routine', 1000000, 128000),
  'anthropic/claude-haiku-5-5': ('bulk', 1000000, 128000),
- 'gemini/gemini-4-argon': ('judgment', 1048576, 65536),
- 'gemini/gemini-3.8-flash': ('routine', 1048576, 65536),
+ 'gemini/gemini-4-carbon': ('judgment', 1048576, 65536),
+ 'gemini/gemini-4-neon': ('judgment', 1048576, 65536),
+ 'gemini/gemini-4-hydrogen': ('routine', 1048576, 65536),
  'gemini/gemini-3.5-flash-lite': ('bulk', 1048576, 65536),
 }
 ANTHROPIC = [m for m in MODELS if m.startswith('anthropic/')]
 GOOGLE_LEVELS = {
- 'gemini/gemini-4-argon': ['low', 'medium', 'high'],
- 'gemini/gemini-3.8-flash': ['low', 'medium', 'high'],
+ 'gemini/gemini-4-carbon': ['low', 'medium', 'high'],
+ 'gemini/gemini-4-neon': ['low', 'medium', 'high', 'xhigh'],
+ 'gemini/gemini-4-hydrogen': ['low', 'medium', 'high', 'xhigh'],
  'gemini/gemini-3.5-flash-lite': ['minimal', 'low', 'medium', 'high'],
 }
 
-# Superseded releases removed on 2026-11-06. Their ids must no longer resolve.
+# Superseded releases, removed on 2026-11-20 and 2026-11-06. Their ids must no longer resolve.
 REMOVED = [
+ 'openai/gpt-6-astra', 'openai/gpt-6.1-sol', 'anthropic/claude-fable-5-1',
+ 'gemini/gemini-4-argon', 'gemini/gemini-3.8-flash',
  'openai/gpt-6-sol', 'openai/gpt-5.6-sol', 'openai/gpt-5.6-terra', 'openai/gpt-5.6-luna',
  'anthropic/claude-fable-5', 'anthropic/claude-opus-4-8', 'anthropic/claude-sonnet-5',
  'anthropic/claude-haiku-4-5-20251001',
@@ -63,7 +67,7 @@ def test_superseded_models_are_gone(model):
 
 
 def test_preferred_role_resolution():
- tiers = yaml.safe_load(Path(os.environ.get('SYNTHESIS_TIERS_FILE', Path(__file__).parent / 'fixtures/model-tier-preferences-2026-11-06.yaml')).read_text())
+ tiers = yaml.safe_load(Path(os.environ.get('SYNTHESIS_TIERS_FILE', Path(__file__).parent / 'fixtures/model-tier-preferences-2026-11-20.yaml')).read_text())
  for provider, block in tiers['providers'].items():
   for role in ['judgment', 'routine', 'bulk']:
    assert config.get_model_by_tier(provider, role) == config.normalize_model_id(provider, block[role][0])
@@ -71,24 +75,36 @@ def test_preferred_role_resolution():
 
 def test_provider_defaults():
  assert {p: config.get_provider_config(p)['default_model'] for p in config.get_providers()} == {
-  'openai': 'gpt-6.1-sol', 'anthropic': 'claude-sonnet-5-5', 'google': 'gemini/gemini-3.8-flash', 'ollama': 'gemma4:31b'}
+  'openai': 'gpt-6.2-sol', 'anthropic': 'claude-sonnet-5-5', 'google': 'gemini/gemini-4-hydrogen', 'ollama': 'gemma4:31b'}
  assert config.get_default_model() == 'anthropic/claude-sonnet-5-5'
 
 
 @pytest.mark.parametrize('model', list(MODELS))
 def test_explicit_supported_effort_survives_core(model):
- effort = 'xhigh' if model.startswith(('openai/', 'anthropic/')) else 'high'
+ effort = 'xhigh' if model.startswith(('openai/', 'anthropic/')) or 'xhigh' in GOOGLE_LEVELS.get(model, []) else 'high'
  assert _resolve_thinking_for_model(model, effort)['reasoning_effort'] == effort
 
 
-@pytest.mark.parametrize('effort', ['minimal', 'off', 'ultra', 'typo'])
+@pytest.mark.parametrize('effort', ['none', 'minimal', 'off', 'ultra', 'typo'])
 def test_unsupported_effort_is_not_silently_replaced(effort):
- with pytest.raises(ValueError): _resolve_thinking_for_model('openai/gpt-6-astra', effort)
+ with pytest.raises(ValueError): _resolve_thinking_for_model('openai/gpt-6.2-astra', effort)
 
 
-def test_gpt_6_1_sol_has_no_none_effort():
- # GPT-6.1 Sol dropped the `none` level that GPT-6 Sol had.
- with pytest.raises(ValueError): _resolve_thinking_for_model('openai/gpt-6.1-sol', 'none')
+@pytest.mark.parametrize('model', ['openai/gpt-6.2-astra', 'openai/gpt-6.2-sol'])
+def test_gpt_6_2_rejects_none_effort(model):
+ # OpenAI: the API rejects GPT-6.2 Astra and Sol requests that set effort `none`.
+ with pytest.raises(ValueError): _resolve_thinking_for_model(model, 'none')
+
+
+@pytest.mark.parametrize('model', ['gemini/gemini-4-carbon', 'gemini/gemini-4-neon', 'gemini/gemini-4-hydrogen'])
+def test_gemini_4_rejects_minimal(model):
+ # Google: Gemini 4 rejects the `minimal` thinking level with an error.
+ with pytest.raises(ValueError): _resolve_thinking_for_model(model, 'minimal')
+
+
+def test_carbon_caps_thinking_at_high():
+ # Carbon supports low, medium and high; xhigh belongs to Neon and Hydrogen.
+ with pytest.raises(ValueError): _resolve_thinking_for_model('gemini/gemini-4-carbon', 'xhigh')
 
 
 @pytest.mark.parametrize('effort', ['xhigh', 'max', 'none'])
@@ -112,7 +128,7 @@ def test_anthropic_request_builders_preserve_effort(model):
   assert 'temperature' not in out and 'reasoning_effort' not in out
 
 
-@pytest.mark.parametrize('model,effort', [('gemini/gemini-4-argon', 'medium'), ('gemini/gemini-3.8-flash', 'high'), ('gemini/gemini-3.5-flash-lite', 'minimal')])
+@pytest.mark.parametrize('model,effort', [('gemini/gemini-4-carbon', 'medium'), ('gemini/gemini-4-neon', 'xhigh'), ('gemini/gemini-4-hydrogen', 'high'), ('gemini/gemini-3.5-flash-lite', 'minimal')])
 def test_google_direct_builder_uses_level_not_budget(model, effort):
  backend = object.__new__(DirectBackend)
  name, contents, cfg = backend._build_google_request(LLMRequest(model=model, messages=[], temperature=0.6, reasoning_effort=effort))
@@ -131,11 +147,13 @@ def test_model_endpoints_preserve_catalog_modes(monkeypatch):
  monkeypatch.setattr(module, 'get_available_models', config.get_all_models)
  outputs = [asyncio.run(module.list_all_models())['models'], [m.model_dump() for m in asyncio.run(module.list_models()).models]]
  for models in outputs:
-  info = next(m for m in models if m['id'] == 'openai/gpt-6-astra')
+  info = next(m for m in models if m['id'] == 'openai/gpt-6.2-astra')
   assert info['thinking']['modes'] == ['low', 'medium', 'high', 'xhigh', 'max']
+  neon = next(m for m in models if m['id'] == 'gemini/gemini-4-neon')
+  assert neon['thinking']['modes'] == ['low', 'medium', 'high', 'xhigh']
 
 
-@pytest.mark.parametrize('model', ['openai/gpt-6-astra', 'anthropic/claude-fable-5-1', 'gemini/gemini-4-argon'])
+@pytest.mark.parametrize('model', ['openai/gpt-6.2-astra', 'anthropic/claude-fable-5-2', 'gemini/gemini-4-carbon', 'gemini/gemini-4-neon'])
 def test_transport_rejects_unsupported_effort(model):
  req = LLMRequest(model=model, messages=[], reasoning_effort='off')
  with pytest.raises(ValueError): _build_completion_kwargs(req)
@@ -146,7 +164,7 @@ def test_transport_rejects_unsupported_effort(model):
 
 @pytest.mark.parametrize('extra', [{'reasoning_effort': 'low'}, {'model': 'other-model'}, {'max_tokens': 17}, {'max_completion_tokens': 17}])
 def test_freeform_cannot_replace_request_identity_effort_or_limit(extra):
- req = LLMRequest(model='openai/gpt-6.1-sol', messages=[], max_tokens=8192, reasoning_effort='xhigh', extra=extra)
+ req = LLMRequest(model='openai/gpt-6.2-sol', messages=[], max_tokens=8192, reasoning_effort='xhigh', extra=extra)
  with pytest.raises(ValueError): _build_completion_kwargs(req)
  with pytest.raises(ValueError): DirectBackend._build_openai_kwargs(object.__new__(DirectBackend), req)
 
@@ -154,7 +172,7 @@ def test_freeform_cannot_replace_request_identity_effort_or_limit(extra):
 TOOLS = {'tools': [{'type': 'function', 'function': {'name': 'example', 'parameters': {'type': 'object'}}}]}
 
 
-@pytest.mark.parametrize('model', ['openai/gpt-6-astra', 'openai/gpt-6.1-sol', 'openai/gpt-6.1-terra'])
+@pytest.mark.parametrize('model', ['openai/gpt-6.2-astra', 'openai/gpt-6.2-sol', 'openai/gpt-6.1-terra'])
 def test_tool_requests_never_lower_effort_for_unsupported_endpoint(model):
  req = LLMRequest(model=model, messages=[], reasoning_effort='xhigh', extra=TOOLS)
  with pytest.raises(ValueError, match='Responses API'): _build_completion_kwargs(req)
@@ -187,10 +205,10 @@ def test_real_openai_sdk_serializes_exact_effort_without_network():
  bodies = []
  def respond(request):
   bodies.append(json.loads(request.content))
-  return httpx.Response(200, json={'id': 'fixture', 'object': 'chat.completion', 'created': 0, 'model': 'gpt-6.1-sol', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'fixture'}, 'finish_reason': 'stop'}]})
+  return httpx.Response(200, json={'id': 'fixture', 'object': 'chat.completion', 'created': 0, 'model': 'gpt-6.2-sol', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'fixture'}, 'finish_reason': 'stop'}]})
  with httpx.Client(transport=httpx.MockTransport(respond)) as transport:
   client = openai.OpenAI(api_key='fixture-noncredential', base_url='https://fixture.invalid', http_client=transport)
-  request = LLMRequest(model='openai/gpt-6.1-sol', messages=[{'role': 'user', 'content': 'fixture'}], reasoning_effort='xhigh')
+  request = LLMRequest(model='openai/gpt-6.2-sol', messages=[{'role': 'user', 'content': 'fixture'}], reasoning_effort='xhigh')
   client.chat.completions.create(**DirectBackend._build_openai_kwargs(object.__new__(DirectBackend), request))
  assert bodies[0]['reasoning_effort'] == 'xhigh'
  assert bodies[0]['max_completion_tokens'] == request.max_tokens
@@ -225,32 +243,101 @@ def test_litellm_contract_does_not_invent_prices(model):
   assert prices == before.get(key, {}), (key, prices, before.get(key, {}))
 
 
-def test_model_missing_from_litellms_map_still_takes_its_effort():
- """GPT-6.1 Terra is absent from LiteLLM 1.108.1's bundled model map.
+def _without_map_entries(native):
+ """Remove every bundled-map row for a model, as a release LiteLLM predates."""
+ import litellm
+ keys = [k for k in litellm.model_cost if k == native or k.endswith('/' + native)]
+ return {k: litellm.model_cost.pop(k) for k in keys}
 
- Ragbot registers the catalog's verified capabilities, so a request at an
- effort LiteLLM would otherwise refuse for an unknown model still passes,
- with no price invented.
+
+def _production_litellm_state(monkeypatch):
+ """Construct the real backend, as a running Ragbot has, with globals restored after."""
+ import litellm
+ from synthesis_engine.llm.litellm_backend import LiteLLMBackend
+ monkeypatch.setattr(litellm, 'drop_params', False)
+ monkeypatch.setattr(litellm, 'suppress_debug_info', litellm.suppress_debug_info)
+ LiteLLMBackend()
+
+
+def test_backend_leaves_the_global_drop_params_alone(monkeypatch):
+ """LiteLLM ORs the module-wide drop_params with the per-call value.
+
+ A backend that set the global to True overrode every contract request's
+ drop_params=False, so an effort LiteLLM's map lacked was erased instead of
+ refused. Requests now carry the flag themselves.
  """
  import litellm
+ _production_litellm_state(monkeypatch)
+ assert litellm.drop_params is False
+ assert _build_completion_kwargs(LLMRequest(model='openai/gpt-6.2-astra', messages=[], reasoning_effort='xhigh'))['drop_params'] is False
+ assert _build_completion_kwargs(LLMRequest(model='ollama_chat/gemma4:12b', messages=[], reasoning_effort='none'))['drop_params'] is True
+
+
+def _restore_map_entries(model, saved):
+ import litellm
+ native = model.partition('/')[2]
+ for k in [k for k in litellm.model_cost if k == native or k.endswith('/' + native)]:
+  litellm.model_cost.pop(k, None)
+ litellm.model_cost.update(saved)
+
+
+@pytest.mark.parametrize('model', ['openai/gpt-6.2-astra', 'openai/gpt-6.2-sol', 'openai/gpt-6.1-terra'])
+def test_model_missing_from_litellms_map_still_takes_its_effort(model, monkeypatch):
+ """LiteLLM's bundled map can lag a release.
+
+ On 2026-11-20 the newest stable LiteLLM (1.110.2) lacked GPT-6.2 Astra and
+ Sol, and 1.108.1 lacked GPT-6.1 Terra. Without a row LiteLLM refuses xhigh.
+ Ragbot registers the catalog's verified capabilities, so the request passes
+ at the effort asked for, with no price invented.
+ """
+ import litellm
+ from litellm.exceptions import UnsupportedParamsError
  from litellm.utils import get_optional_params
- keys = ['openai/gpt-6.1-terra', 'gpt-6.1-terra']
- saved = {k: litellm.model_cost.pop(k) for k in keys if k in litellm.model_cost}
+ _production_litellm_state(monkeypatch)
+ native = model.partition('/')[2]
+ saved = _without_map_entries(native)
  try:
-  kwargs = _build_completion_kwargs(LLMRequest(model='openai/gpt-6.1-terra', messages=[], reasoning_effort='xhigh'))
+  with pytest.raises(UnsupportedParamsError):
+   get_optional_params(model=native, custom_llm_provider='openai', reasoning_effort='xhigh', drop_params=False)
+  kwargs = _build_completion_kwargs(LLMRequest(model=model, messages=[], reasoning_effort='xhigh'))
   assert kwargs['reasoning_effort'] == 'xhigh' and kwargs['drop_params'] is False
-  registered = litellm.model_cost['openai/gpt-6.1-terra']
+  registered = litellm.model_cost[model]
   assert registered['supports_xhigh_reasoning_effort'] is True
   assert not any(('cost' in k or 'price' in k) and v for k, v in registered.items())
-  params = get_optional_params(model='gpt-6.1-terra', custom_llm_provider='openai', reasoning_effort='xhigh', drop_params=False)
+  params = get_optional_params(model=native, custom_llm_provider='openai', reasoning_effort='xhigh', drop_params=False)
   assert params['reasoning_effort'] == 'xhigh'
  finally:
-  for k in keys: litellm.model_cost.pop(k, None)
-  litellm.model_cost.update(saved)
+  _restore_map_entries(model, saved)
+
+
+@pytest.mark.parametrize('model', ['gemini/gemini-4-neon', 'gemini/gemini-4-hydrogen'])
+def test_gemini_xhigh_survives_a_map_without_the_model(model, monkeypatch):
+ """LiteLLM sends Gemini's xhigh thinking level only for a model its map marks
+ supports_xhigh_reasoning_effort, and stable 1.110.2 has no row for Neon.
+
+ Ragbot registers that capability from the catalog, so Neon and Hydrogen keep
+ xhigh where the bundled map lacks them.
+ """
+ import litellm
+ from litellm.exceptions import UnsupportedParamsError
+ from litellm.llms.gemini.chat.transformation import GoogleAIStudioGeminiConfig
+ _production_litellm_state(monkeypatch)
+ native = model.partition('/')[2]
+ saved = _without_map_entries(native)
+ try:
+  with pytest.raises(UnsupportedParamsError):
+   GoogleAIStudioGeminiConfig().map_openai_params({'reasoning_effort': 'xhigh'}, {}, native, False)
+  kwargs = _build_completion_kwargs(LLMRequest(model=model, messages=[], reasoning_effort='xhigh'))
+  assert kwargs['reasoning_effort'] == 'xhigh' and kwargs['drop_params'] is False
+  assert not any(('cost' in k or 'price' in k) and v for k, v in litellm.model_cost[model].items())
+  mapped = GoogleAIStudioGeminiConfig().map_openai_params({'reasoning_effort': 'xhigh'}, {}, native, False)
+  assert mapped['thinkingConfig']['thinkingLevel'] == 'xhigh'
+ finally:
+  _restore_map_entries(model, saved)
 
 
 def test_new_contract_cannot_silently_drop_effort():
- assert _build_completion_kwargs(LLMRequest(model='openai/gpt-6-astra', messages=[], reasoning_effort='xhigh'))['drop_params'] is False
+ assert _build_completion_kwargs(LLMRequest(model='openai/gpt-6.2-astra', messages=[], reasoning_effort='xhigh'))['drop_params'] is False
 
 
 @pytest.mark.parametrize('model,effort', [(model, effort) for model, efforts in GOOGLE_LEVELS.items() for effort in efforts])
@@ -264,6 +351,6 @@ def test_actual_litellm_google_transform_retains_exact_level(model, effort):
 
 @pytest.mark.parametrize('extra', [{'reasoning_effort': 'low'}, {'temperature': 0.5}])
 def test_google_direct_does_not_silently_ignore_freeform_options(extra):
- req = LLMRequest(model='gemini/gemini-3.8-flash', messages=[], reasoning_effort='high', extra=extra)
+ req = LLMRequest(model='gemini/gemini-4-hydrogen', messages=[], reasoning_effort='high', extra=extra)
  with pytest.raises(ValueError, match='Unsupported direct Google'):
   DirectBackend._build_google_request(object.__new__(DirectBackend), req)

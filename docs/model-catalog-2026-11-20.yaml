@@ -1,0 +1,437 @@
+# Model catalog verification record for engines.yaml (2026-11-20).
+# Replaces docs/model-catalog-2026-11-06.yaml.
+schema_version: 2
+verified: '2026-11-20'
+scope: 'Cloud provider documentation fetched 2026-11-20: models pages, model pages, changelogs, migration
+  guides and pricing. Offline serialization through the provider SDKs and LiteLLM. Account visibility through
+  each provider''s list-models endpoint with the owner''s default keys. The local lineup was verified on
+  2026-11-06 and is carried forward unchanged; Google''s Gemma release page was read again on 2026-11-20.'
+sources:
+  openai-models: https://developers.openai.com/api/docs/models
+  openai-astra: https://developers.openai.com/api/docs/models/gpt-6.2-astra
+  openai-sol: https://developers.openai.com/api/docs/models/gpt-6.2-sol
+  openai-latest-model: https://developers.openai.com/api/docs/guides/latest-model
+  openai-reasoning: https://developers.openai.com/api/docs/guides/reasoning
+  openai-changelog: https://developers.openai.com/api/docs/changelog
+  anthropic-overview: https://platform.claude.com/docs/en/models/overview
+  anthropic-fable: https://platform.claude.com/docs/en/models/fable-5-2/overview
+  anthropic-fable-whats-new: https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2
+  anthropic-effort: https://platform.claude.com/docs/en/build-with-claude/effort
+  google-models: https://aistudio.google.com/docs/models
+  google-choosing: https://aistudio.google.com/docs/choosing-a-model
+  google-carbon: https://aistudio.google.com/docs/models/gemini-4-carbon
+  google-neon: https://aistudio.google.com/docs/models/gemini-4-neon
+  google-neon-whats-new: https://aistudio.google.com/docs/whats-new-gemini-4-neon
+  google-hydrogen: https://aistudio.google.com/docs/models/gemini-4-hydrogen
+  google-hydrogen-whats-new: https://aistudio.google.com/docs/whats-new-gemini-4-hydrogen
+  google-argon: https://aistudio.google.com/docs/models/gemini-4-argon
+  google-thinking: https://aistudio.google.com/docs/thinking
+  google-pricing: https://aistudio.google.com/docs/pricing
+  google-changelog: https://aistudio.google.com/docs/changelog
+  gemma-releases: https://gemma.ai/models/releases/
+  pypi-litellm: https://pypi.org/pypi/litellm/json
+  pypi-google-genai: https://pypi.org/pypi/google-genai/json
+  # Read on 2026-11-06 for the local lineup, which this refresh carries forward.
+  ollama-gemma4: https://ollama.com/library/gemma4/tags
+  gemma4-12b-card: https://hf.co/google/gemma-4-12B-it
+  ollama-qwen3.8: https://ollama.com/library/qwen3.8/tags
+  qwen3.8-27b-card: https://hf.co/Qwen/Qwen3.8-27B
+  ollama-qwen3.8-flash-next: https://ollama.com/library/qwen3.8-flash-next/tags
+  qwen3.8-flash-next-card: https://hf.co/Qwen/Qwen3.8-Flash-Next
+  ollama-muse-glimmer: https://ollama.com/library/muse-glimmer/tags
+  muse-glimmer-card: https://hf.co/meta-models/Muse-Glimmer-30B
+  ollama-nemotron-super: https://ollama.com/library/nemotron-3.5-super/tags
+  ollama-mistral-medium: https://ollama.com/library/mistral-medium-3.5/tags
+  mistral-medium-card: https://hf.co/mistralai/Mistral-Medium-3.5-128B
+# Prices are the documented standard rates per million tokens, input / output. They are a record of the
+# day's documentation; engines.yaml carries no prices.
+models:
+  gpt-6.2-astra:
+    sources:
+    - openai-models
+    - openai-astra
+    - openai-latest-model
+    - openai-reasoning
+    - openai-changelog
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: &openai_reasoning_only
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: product policy (OpenAI states no default; its latest-model guide says to start at medium)
+    price_per_mtok: $8 / $40 (doubles above 272K input tokens)
+    released: '2026-11-17'
+    supersedes:
+    - gpt-6-astra
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Rejects effort none; Chat Completions takes no temperature, top_p, logprobs or top_logprobs.
+    - Tool calling through the Responses API only.
+  gpt-6.2-sol:
+    sources:
+    - openai-models
+    - openai-sol
+    - openai-latest-model
+    - openai-reasoning
+    - openai-changelog
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: *openai_reasoning_only
+    reasoning_default: medium
+    default_provenance: product policy (OpenAI states no default; its latest-model guide says to start at medium)
+    price_per_mtok: $2 / $10 (doubles above 272K input tokens)
+    released: '2026-11-17'
+    supersedes:
+    - gpt-6.1-sol
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Rejects effort none; Chat Completions takes no temperature, top_p, logprobs or top_logprobs.
+    - Tool calling through the Responses API only.
+  gpt-6.1-terra:
+    sources:
+    - openai-models
+    - openai-changelog
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: &openai_with_none
+    - none
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: medium
+    default_provenance: provider documentation (2026-11-06 record)
+    price_per_mtok: $1 / $5
+    released: '2026-10-26'
+    supersedes:
+    - gpt-5.6-terra
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Still OpenAI's Terra model on 2026-11-20; no GPT-6.2 Terra exists.
+    - Tool calling through the Responses API only.
+  gpt-6-luna:
+    sources:
+    - openai-models
+    - openai-reasoning
+    context_window: 1050000
+    max_input_tokens: 922000
+    max_output_tokens: 128000
+    effort_modes: *openai_with_none
+    reasoning_default: medium
+    default_provenance: provider documentation
+    price_per_mtok: $0.10 / $0.50
+    released: '2026-09-22'
+    supersedes:
+    - gpt-5.6-luna
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Still OpenAI's Luna model on 2026-11-20; no GPT-6.2 Luna exists.
+    - Chat Completions function calling only at effort none.
+  claude-fable-5-2:
+    sources:
+    - anthropic-overview
+    - anthropic-fable
+    - anthropic-fable-whats-new
+    - anthropic-effort
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: &anthropic_effort
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    reasoning_default: high
+    default_provenance: provider documentation
+    price_per_mtok: $8 / $40
+    released: '2026-11-09'
+    supersedes:
+    - claude-fable-5-1
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Adaptive thinking always on; disabled thinking and budget_tokens return 400; omit temperature, top_p and top_k.
+    - Requires 30-day data retention; not available under zero data retention unless Anthropic authorizes it.
+    - 'Breaking changes from Fable 5.1 cover replayed thinking blocks (prefix check, model binding), the
+      computer_20251124 tool and advisor pairing. Ragbot sends text-only history and neither tool, so none
+      applies.'
+  claude-opus-5-5:
+    sources:
+    - anthropic-overview
+    - anthropic-effort
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: *anthropic_effort
+    reasoning_default: medium
+    default_provenance: provider documentation
+    price_per_mtok: $4 / $20
+    released: '2026-09-22'
+    supersedes:
+    - claude-opus-4-8
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Adaptive thinking always on; disabled thinking returns 400 at every effort.
+  claude-sonnet-5-5:
+    sources:
+    - anthropic-overview
+    - anthropic-effort
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: *anthropic_effort
+    reasoning_default: high
+    default_provenance: provider documentation
+    price_per_mtok: $2 / $10
+    released: '2026-09-28'
+    supersedes:
+    - claude-sonnet-5
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Disabled thinking returns 400; between_tools turns off up-front thinking at high effort or below.
+  claude-haiku-5-5:
+    sources:
+    - anthropic-overview
+    - anthropic-effort
+    context_window: 1000000
+    max_output_tokens: 128000
+    effort_modes: *anthropic_effort
+    reasoning_default: medium
+    default_provenance: provider documentation
+    price_per_mtok: from $0.10 / $0.50
+    released: '2026-10-07'
+    supersedes:
+    - claude-haiku-4-5-20251001
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Thinking may be disabled at effort high or below; Ragbot always sends adaptive thinking.
+  gemini-4-carbon:
+    sources:
+    - google-models
+    - google-choosing
+    - google-carbon
+    - google-thinking
+    - google-pricing
+    - google-changelog
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes:
+    - low
+    - medium
+    - high
+    reasoning_default: medium
+    default_provenance: provider documentation
+    price_per_mtok: $2 / $10 through 2026-11-30, then $4 / $20
+    released: '2026-11-10'
+    supersedes:
+    - gemini-4-argon (as Ragbot's Google judgment flagship; Google names no predecessor)
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Google's strongest reasoning model. The window is shared by input and output; 65,536 is the
+      synchronous output default and cap (up to 1,048,576 with long decode).
+  gemini-4-neon:
+    sources:
+    - google-models
+    - google-choosing
+    - google-neon
+    - google-neon-whats-new
+    - google-thinking
+    - google-pricing
+    - google-changelog
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes: &gemini_4_xhigh
+    - low
+    - medium
+    - high
+    - xhigh
+    reasoning_default: high
+    default_provenance: provider documentation
+    price_per_mtok: $3 / $15
+    released: '2026-11-18'
+    supersedes:
+    - gemini-3.1-pro-preview (Google's migration table)
+    - gemini-4-argon (as Ragbot's second Google judgment model; Google's comparison no longer lists Argon)
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Sits between Hydrogen and Carbon. Google sends gemini-3.1-pro-preview users here, a migration the 2026-11-06
+      record gave to Argon, and Neon's migration guide covers moving from Argon.
+    - Rejects minimal; remove temperature, top_p and top_k (out-of-range values return 400). Paid tier only.
+  gemini-4-hydrogen:
+    sources:
+    - google-models
+    - google-choosing
+    - google-hydrogen
+    - google-hydrogen-whats-new
+    - google-thinking
+    - google-pricing
+    - google-changelog
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes: *gemini_4_xhigh
+    reasoning_default: high
+    default_provenance: provider documentation
+    price_per_mtok: $1.50 / $7.50
+    released: '2026-11-12'
+    supersedes:
+    - gemini-3.8-flash (Google's migration table and Hydrogen's migration guide)
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Google calls it the recommended upgrade from Gemini 3.8 Flash and the place to start for new projects.
+    - Rejects minimal; default moved from medium to high and adds xhigh.
+  gemini-3.5-flash-lite:
+    sources:
+    - google-models
+    - google-choosing
+    - google-thinking
+    - google-pricing
+    context_window: 1048576
+    max_output_tokens: 65536
+    effort_modes:
+    - minimal
+    - low
+    - medium
+    - high
+    reasoning_default: minimal
+    default_provenance: provider documentation
+    price_per_mtok: $0.30 / $2.50
+    released: '2026-07-21'
+    supersedes:
+    - gemini-3.1-flash-lite-preview (shut down 2026-05-25)
+    endpoint_account_availability: listed for the owner's key (2026-11-20)
+    notes:
+    - Still Google's fastest, lowest-cost general model on 2026-11-20; sampling parameters deprecated and ignored.
+# Request-path support for the levels above, in the libraries Ragbot installs.
+dependency_floors:
+  google-genai: 3.3.0 is the first release whose ThinkingLevel has XHIGH (3.0.0 through 3.2.0 do not).
+  litellm: 1.109.2 is the first stable release that maps reasoning_effort xhigh to Gemini's thinkingLevel; it reads
+    supports_xhigh_reasoning_effort, which Ragbot registers from this catalog. 1.109.0, 1.109.1, 1.110.0rc1 and
+    1.110.0rc2 lack the mapping.
+local_models:
+  verified: '2026-11-06'
+  gemma4:31b:
+    sources:
+    - ollama-gemma4
+    params: 30.7B dense
+    context_window: 262144
+    license: apache-2.0
+    local_tag_verified: true
+    thinking: hybrid, on by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
+  gemma4:26b:
+    sources:
+    - ollama-gemma4
+    params: 25.2B total / 3.8B active MoE
+    context_window: 262144
+    license: apache-2.0
+    local_tag_verified: true
+    thinking: hybrid, on by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
+  gemma4:12b:
+    sources:
+    - ollama-gemma4
+    - gemma4-12b-card
+    params: 11.95B dense
+    context_window: 262144
+    license: apache-2.0
+    released: '2026-06-03'
+    local_tag_verified: true
+    thinking: hybrid, on by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
+  gemma4:e4b:
+    sources:
+    - ollama-gemma4
+    params: 4.5B effective
+    context_window: 131072
+    license: apache-2.0
+    local_tag_verified: true
+    thinking: hybrid, off by default (Ollama 0.32.15 capabilities and a request without think, 2026-11-06)
+  qwen3.8:27b:
+    sources:
+    - ollama-qwen3.8
+    - qwen3.8-27b-card
+    params: 27B dense, vision
+    context_window: 262144
+    license: apache-2.0
+    released: 2026-08
+    supersedes:
+    - qwen3.6:27b
+    - qwen3.6:35b-a3b
+    local_tag_verified: true
+  qwen3.8-flash-next:125b-a6b-q4_K_M:
+    sources:
+    - ollama-qwen3.8-flash-next
+    - qwen3.8-flash-next-card
+    params: 125B total / 6B active MoE (preview)
+    context_window: 262144
+    license: qwen-community-1.0
+    released: 2026-08
+    local_tag_verified: true
+  muse-glimmer:30b:
+    sources:
+    - ollama-muse-glimmer
+    - muse-glimmer-card
+    params: 29.6B dense, vision
+    context_window: 131072
+    license: apache-2.0
+    released: 2026-08
+    supersedes:
+    - llama4:scout
+    - llama4:maverick
+    local_tag_verified: true
+  nemotron-3.5-super:120b-a12b:
+    sources:
+    - ollama-nemotron-super
+    params: 120B total / 12B active hybrid MoE, vision
+    context_window: 1048576
+    license: openmdw-1.1
+    released: 2026-10
+    local_tag_verified: true
+  mistral-medium-3.5:128b:
+    sources:
+    - ollama-mistral-medium
+    - mistral-medium-card
+    params: 128B dense, vision
+    context_window: 262144
+    license: modified-mit
+    local_tag_verified: true
+gemma_check_2026_11_20: Google's Gemma release page lists EmbeddingGemma 2 (2026-10-06) as its only release after
+  Gemma 4 12B (2026-06-03); no newer Gemma chat model exists, so the Gemma 4 entries stand.
+removed:
+  '2026-11-20':
+    cloud:
+      gpt-6-astra: superseded by gpt-6.2-astra
+      gpt-6.1-sol: superseded by gpt-6.2-sol
+      claude-fable-5-1: superseded by claude-fable-5-2
+      gemini-4-argon: absent from Google's model comparison, which now covers Carbon, Neon, Hydrogen and Flash-Lite;
+        Neon and Carbon take its role
+      gemini-3.8-flash: superseded by gemini-4-hydrogen
+  '2026-11-06':
+    cloud:
+    - gpt-6-sol
+    - gpt-5.6-sol
+    - gpt-5.6-terra
+    - gpt-5.6-luna
+    - claude-fable-5
+    - claude-opus-4-8
+    - claude-sonnet-5
+    - claude-haiku-4-5-20251001
+    - gemini-3.1-pro-preview
+    - gemini-3-flash-preview
+    - gemini-3.1-flash-lite-preview
+    local:
+      qwen3.6:35b-a3b: superseded by the Qwen3.8 generation
+      qwen3.6:27b: superseded by qwen3.8:27b
+      llama4:scout: superseded by muse-glimmer:30b
+      llama4:maverick: superseded by muse-glimmer:30b
+      deepseek-v3.2:671b: Ollama page retired 2026-07-15; V4 and V4.1 are cloud-only on Ollama
+      mistral-large-3:675b: local tag no longer published; Mistral Large 4 is cloud-only on Ollama
+      mistral-small-4:119b: no Ollama library page
+not_included:
+  ollama_cloud_tags: deepseek-v4-pro, deepseek-v4.1-flash, mistral-large-4 and muse-spark-open exist on
+    Ollama only as :cloud tags, which run on Ollama's servers; routing treats the ollama provider as local,
+    so they are excluded.
+  nemotron-3.5-lightning: license and release date could not be verified (2026-11-06)
+  claude-mythos-5-2: available only to organizations verified through Anthropic's programs, as Mythos 5.1 was

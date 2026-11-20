@@ -42,17 +42,25 @@ openai>=3.46.0,<4
 # other dependency required it, but it pinned google-ai-generativelanguage
 # 0.6.15, which held protobuf below 6 and google-api-core, proto-plus and
 # grpcio-status at old releases.
-google-genai>=3.0.0
-# Capability-only registration must preserve missing prices and explicit effort.
-# Verified offline transformation: docs/model-catalog-2026-11-06.yaml.
-# 1.108.0 is the first release that accepts openai 3 (see above).
 #
-# The floor is the 1.109.0 release candidate because it is the first LiteLLM
-# that accepts filelock 4: every release from 1.104.0 through 1.108.1 caps
-# filelock below 4, and filelock 3.x carries 13 CVEs fixed only in 4.x. pip
-# installs the candidate today and moves to 1.109.0 itself once it is released,
-# since the final release satisfies this floor.
-litellm>=1.109.0rc1
+# Gemini 4 Neon and Hydrogen take the xhigh thinking level. ThinkingLevel has
+# XHIGH from 3.3.0; 3.0.0 through 3.2.0 lack it (verified 2026-11-20). The
+# floor is the latest release.
+google-genai>=3.6.1
+# Capability-only registration must preserve missing prices and explicit effort.
+# Verified offline transformation: docs/model-catalog-2026-11-20.yaml.
+# 1.108.0 is the first release that accepts openai 3 (see above). The 1.109
+# line is the first that accepts filelock 4: every release from 1.104.0 through
+# 1.108.1 caps filelock below 4, and filelock 3.x carries 13 CVEs fixed only in
+# 4.x.
+#
+# The floor is the latest stable release. 1.109.2 is the first stable release
+# that sends Gemini's xhigh thinking level, which Neon and Hydrogen take;
+# 1.109.0, 1.109.1 and the first two 1.110.0 release candidates refuse it.
+# Until 2026-11-20 the floor was the 1.109.0 release candidate, and a
+# pre-release floor lets pip install development builds: CI on 2026-11-16 ran
+# LiteLLM 1.111.0.dev4.
+litellm>=1.110.2
 # Transitive (torch, huggingface_hub, litellm), declared so the patched major is
 # the floor (4.2.1 fixed the CVEs that 3.32.7 carries; 4.2.9 is the latest).
 filelock>=4.2.9

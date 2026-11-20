@@ -84,7 +84,7 @@ def resolve_model(engines_config: dict, platform: str, tier: str = 'flagship') -
               the other three match the model's `tier` field.
 
     Returns:
-        Model ID string (e.g., 'claude-fable-5-1')
+        Model ID string (e.g., 'claude-fable-5-2')
 
     Raises:
         ValueError: If platform or tier not found

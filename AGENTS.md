@@ -164,7 +164,7 @@ Ragbot routes every LLM call through a backend interface (`src/ragbot/llm/`) so 
 
 Two backends ship:
 
-- **litellm** (default) — wraps `litellm.completion()`. Best provider/model coverage, handles long-tail provider quirks. The floor in `requirements.txt` tracks the latest release (well past the March-2026 supply-chain incident range) and is the first that accepts openai 3.
+- **litellm** (default) — wraps `litellm.completion()`. Best provider/model coverage, handles long-tail provider quirks. The floor in `requirements.txt` tracks the latest stable release (well past the March-2026 supply-chain incident range); its comment records which earlier releases fall short and why.
 - **direct** — opt-in. Calls each provider's official SDK directly: `anthropic`, `openai`, `google-genai`. Smaller dependency surface, no third-party gateway. Useful for users who want to retire LiteLLM, or for benchmarking.
 
 Selection: `RAGBOT_LLM_BACKEND={litellm|direct}` (default `litellm`). The cached singleton is exposed via `ragbot.llm.get_llm_backend()`.
@@ -173,7 +173,7 @@ Adding a new backend (e.g., Bifrost, Portkey, OpenRouter) is a single file imple
 
 ### Reasoning / Thinking Modes
 
-Models that advertise thinking support in `engines.yaml` are wired through the catalog-validated `reasoning_effort` parameter. Provider-native identities and supported effort levels come from that catalog; `docs/model-catalog-2026-11-06.yaml` records verification sources. Explicit model, effort and output-limit choices must survive final SDK serialization, including provider extension bodies. Anthropic models take adaptive thinking with the effort in `output_config` and never receive sampling parameters; Gemini models take a thinking level, never a budget; OpenAI models take `max_completion_tokens` (see `synthesis_engine/llm/model_parameters.py`).
+Models that advertise thinking support in `engines.yaml` are wired through the catalog-validated `reasoning_effort` parameter. Provider-native identities and supported effort levels come from that catalog; `docs/model-catalog-2026-11-20.yaml` records verification sources. Explicit model, effort and output-limit choices must survive final SDK serialization, including provider extension bodies. Anthropic models take adaptive thinking with the effort in `output_config` and never receive sampling parameters; Gemini models take a thinking level, never a budget; OpenAI models take `max_completion_tokens` (see `synthesis_engine/llm/model_parameters.py`).
 
 Default policy:
 

@@ -304,7 +304,7 @@ class TestModelMetadata:
 
         assert flat.get('anthropic/claude-opus-5-5', {}).get('display_name') == 'Claude Opus 5.5'
         assert flat.get('openai/gpt-6.1-terra', {}).get('display_name') == 'GPT-6.1 Terra'
-        assert flat.get('gemini/gemini-4-argon', {}).get('display_name') == 'Gemini 4 Argon'
+        assert flat.get('gemini/gemini-4-neon', {}).get('display_name') == 'Gemini 4 Neon'
         assert flat.get('ollama_chat/gemma4:31b', {}).get('display_name') == 'Gemma 4 31B'
 
     def test_supports_thinking_reflects_engines_yaml(self):

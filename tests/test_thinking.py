@@ -47,16 +47,17 @@ class TestResolveThinkingForModel:
     """
 
     @pytest.mark.parametrize("model,default", [
-        ("anthropic/claude-fable-5-1", "high"),
+        ("anthropic/claude-fable-5-2", "high"),
         ("anthropic/claude-opus-5-5", "medium"),
         ("anthropic/claude-sonnet-5-5", "high"),
         ("anthropic/claude-haiku-5-5", "medium"),
-        ("openai/gpt-6-astra", "medium"),
-        ("openai/gpt-6.1-sol", "medium"),
+        ("openai/gpt-6.2-astra", "medium"),
+        ("openai/gpt-6.2-sol", "medium"),
         ("openai/gpt-6.1-terra", "medium"),
         ("openai/gpt-6-luna", "medium"),
-        ("gemini/gemini-4-argon", "medium"),
-        ("gemini/gemini-3.8-flash", "medium"),
+        ("gemini/gemini-4-carbon", "medium"),
+        ("gemini/gemini-4-neon", "high"),
+        ("gemini/gemini-4-hydrogen", "high"),
         ("gemini/gemini-3.5-flash-lite", "minimal"),
     ])
     def test_cloud_models_default_to_catalog_effort(self, monkeypatch, model, default):
@@ -81,7 +82,7 @@ class TestResolveThinkingForModel:
     def test_unsupported_effort_raises_for_cloud_models(self, monkeypatch, effort):
         monkeypatch.delenv("RAGBOT_THINKING_EFFORT", raising=False)
         with pytest.raises(ValueError):
-            _resolve_thinking_for_model("anthropic/claude-fable-5-1", requested_effort=effort)
+            _resolve_thinking_for_model("anthropic/claude-fable-5-2", requested_effort=effort)
 
     def test_local_non_flagship_defaults_to_no_thinking_param(self, monkeypatch):
         # Qwen3.8 thinks by default on its own; sending nothing keeps that.

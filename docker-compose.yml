@@ -162,7 +162,10 @@ services:
     volumes:
       # Mount source for hot reload in development
       - ./web:/app
-      # Named volume to preserve node_modules from image
+      # Named volume for node_modules, so the macOS host never supplies Linux
+      # packages. Docker fills it from the image only when it is created; the
+      # image's dev-entrypoint.sh reinstalls at start whenever package-lock.json
+      # has moved past the installed packages.
       - ragbot-web-node-modules:/app/node_modules
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000

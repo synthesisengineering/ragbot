@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The Dockerfile's production stage runs the self-contained server that
+  // `next build` writes to .next/standalone. Without this, that folder is never
+  // written and the production image cannot build. `next dev` ignores it.
+  output: "standalone",
 };
 
 export default nextConfig;

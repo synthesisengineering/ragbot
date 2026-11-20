@@ -16,11 +16,17 @@ FROM base AS dev
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Record the lockfile these packages came from. dev-entrypoint.sh compares it
+# with the mounted lockfile at every start and reinstalls when they differ,
+# since the compose file's node_modules volume never receives a rebuilt image.
+RUN cp package-lock.json node_modules/.installed-package-lock.json
+COPY --chmod=0755 dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
 
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
 
 EXPOSE 3000
+ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]
 CMD ["npm", "run", "dev"]
 
 # Build for production

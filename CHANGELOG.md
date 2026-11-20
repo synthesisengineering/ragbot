@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The Docker dev web container keeps its packages in step with
+  `package-lock.json`.** `docker-compose.yml` mounts a named volume over
+  `/app/node_modules`, and Docker fills a named volume from the image only when the
+  volume is created, so after a dependency update the dev UI kept running the old
+  packages: Next.js 16.0.10 against a lockfile at 16.4.5 on 2026-11-20. The dev image
+  now records the lockfile its packages came from, and its entrypoint reinstalls at
+  start whenever the mounted lockfile differs.
+- **The web image no longer copies a host `node_modules` or `.next`.** `web/` had no
+  `.dockerignore`, so a build from a checkout with a local install copied
+  macOS-built packages over the image's own.
+- **The production web image builds.** Its last stage copies Next.js's standalone
+  server, but `next.config.ts` never enabled standalone output, so that stage could
+  not build. It now does, and the image serves the app.
+
 ## 4.1.0 — 2026-11-20
 
 Ragbot moves to the models Anthropic, OpenAI and Google released in November

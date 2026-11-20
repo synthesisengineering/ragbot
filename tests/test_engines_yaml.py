@@ -28,7 +28,7 @@ if SRC_DIR not in sys.path:
 
 
 # The local open-weights lineup, verified 2026-11-06 against the Ollama
-# library tag pages (sources: docs/model-catalog-2026-11-06.yaml). Each entry
+# library tag pages (sources: docs/model-catalog-2026-11-20.yaml). Each entry
 # is ``(model_name, provider, expected_tier, expected_min_context_window)``.
 # The ollama provider must carry exactly these models: superseded releases are
 # removed, not kept selectable.
@@ -316,7 +316,7 @@ def _find_tiers_yaml() -> str:
     if env_path and os.path.exists(env_path):
         return env_path
     candidates = [
-        os.path.join(os.path.dirname(__file__), "fixtures", "model-tier-preferences-2026-11-06.yaml"),
+        os.path.join(os.path.dirname(__file__), "fixtures", "model-tier-preferences-2026-11-20.yaml"),
         os.path.expanduser("~/.synthesis/skills/synthesis-model-tiers/tiers.yaml"),
         os.path.expanduser("~/.claude/skills/synthesis-model-tiers/tiers.yaml"),
         os.path.expanduser("~/.agents/skills/synthesis-model-tiers/tiers.yaml"),
@@ -331,7 +331,7 @@ class TestTierVocabulary:
     """Every model declares a tier from the shared role vocabulary."""
 
     def test_every_model_has_valid_tier(self):
-        """Each model's tier is one of frontier / efficient / light."""
+        """Each model's tier is one of judgment / routine / bulk."""
         config = _load_yaml()
         for engine in config["engines"]:
             for model in engine["models"]:

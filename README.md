@@ -323,7 +323,7 @@ Compiler targets in `compile-config.yaml` select models the same way, via `model
 Reasoning / Thinking Modes
 --------------------------
 
-Models that advertise thinking support in `engines.yaml` (Claude Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5, GPT-6 Astra / GPT-6.1 Sol / GPT-6.1 Terra / GPT-6 Luna, Gemini 4 Argon / 3.8 Flash / 3.5 Flash-Lite, and the hybrid-thinking local models) are wired through the catalog-validated `reasoning_effort` parameter. Cloud models default to their catalog effort and reject unsupported values; local flagships default to `medium`, other local models send no thinking parameter; models without thinking metadata → silent (no params sent).
+Models that advertise thinking support in `engines.yaml` (Claude Fable 5.2 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5, GPT-6.2 Astra / GPT-6.2 Sol / GPT-6.1 Terra / GPT-6 Luna, Gemini 4 Carbon / 4 Neon / 4 Hydrogen / 3.5 Flash-Lite, and the hybrid-thinking local models) are wired through the catalog-validated `reasoning_effort` parameter. Cloud models default to their catalog effort and reject unsupported values; local flagships default to `medium`, other local models send no thinking parameter; models without thinking metadata → silent (no params sent).
 
 ```bash
 ragbot chat --thinking-effort high -p "explain this..."          # explicit high effort
@@ -606,8 +606,8 @@ ragbot chat -profile personal -p "What are my travel preferences?"
 # Use Anthropic Claude (loads claude.md instructions)
 ragbot chat -profile personal -e anthropic -p "Summarize my work history"
 
-# Use OpenAI GPT-6.1 Sol (loads chatgpt.md instructions)
-ragbot chat -profile personal -e openai -m gpt-6.1-sol -p "Summarize my work history"
+# Use OpenAI GPT-6.2 Sol (loads chatgpt.md instructions)
+ragbot chat -profile personal -e openai -m gpt-6.2-sol -p "Summarize my work history"
 
 # Use Google Gemini (loads gemini.md instructions)
 ragbot chat -profile personal -e google -p "Summarize my work history"

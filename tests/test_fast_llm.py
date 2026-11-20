@@ -116,7 +116,7 @@ class TestFastLlmRequest:
         assert kwargs['output_config'] == {'effort': 'low'}
 
     def test_openai_helper_reasons_least(self, backend, keys):
-        rag._call_fast_llm('expand this', user_model='openai/gpt-6.1-sol')
+        rag._call_fast_llm('expand this', user_model='openai/gpt-6.2-sol')
 
         (request,) = backend.requests
         assert request.model == 'openai/gpt-6-luna'

@@ -348,7 +348,7 @@ def get_provider_for_model(model_id: str) -> str:
         model_id: Model identifier in any format:
             - Full litellm format: 'anthropic/claude-sonnet-5-5'
             - Just model name: 'claude-sonnet-5-5'
-            - With provider prefix: 'openai/gpt-6.1-sol'
+            - With provider prefix: 'openai/gpt-6.2-sol'
 
     Returns:
         Provider name ('anthropic', 'openai', 'google') or 'anthropic' as fallback
@@ -553,8 +553,8 @@ def get_model_by_tier(provider: str, tier: str) -> Optional[str]:
     Tiers defined in engines.yaml (same vocabulary as the
     synthesis-model-tiers skill's tiers.yaml — labels name the work):
     - "bulk": Fast, cost-effective models (Haiku, GPT-6 Luna, Flash-Lite)
-    - "routine": Balanced models (Sonnet, GPT-6.1 Sol, Flash)
-    - "judgment": Most capable models (Fable, Opus, GPT-6 Astra, Gemini 4 Argon)
+    - "routine": Balanced models (Sonnet, GPT-6.2 Sol, Gemini 4 Hydrogen)
+    - "judgment": Most capable models (Fable, Opus, GPT-6.2 Astra, Gemini 4 Carbon and Neon)
 
     Args:
         provider: Provider name ('anthropic', 'openai', 'google')
@@ -601,10 +601,10 @@ def get_fast_model_for_provider(model_id: str) -> Optional[str]:
     model. This ensures consistent API key usage and billing.
 
     Example:
-        get_fast_model_for_provider("anthropic/claude-fable-5-1")
+        get_fast_model_for_provider("anthropic/claude-fable-5-2")
         → "anthropic/claude-haiku-5-5"
 
-        get_fast_model_for_provider("openai/gpt-6.1-sol")
+        get_fast_model_for_provider("openai/gpt-6.2-sol")
         → "openai/gpt-6-luna"
 
     Args:

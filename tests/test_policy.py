@@ -200,7 +200,7 @@ class TestIsModelAllowed:
 
     def test_allowed_models_honored(self):
         policy = RoutingPolicy(allowed_models=("openai/gpt-6*",))
-        check = is_model_allowed(policy, "openai/gpt-6.1-sol")
+        check = is_model_allowed(policy, "openai/gpt-6.2-sol")
         assert check.allowed is True
         assert "allowed_models" in check.reason
 

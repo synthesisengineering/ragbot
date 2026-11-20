@@ -1,5 +1,53 @@
 # Changelog
 
+## 4.1.0 — 2026-11-20
+
+Ragbot moves to the models Anthropic, OpenAI and Google released in November
+2026, and a catalog model's reasoning effort can no longer be dropped inside
+LiteLLM without an error.
+
+### Changed
+
+- **Models.** `engines.yaml` carries only current models, verified against provider
+  documentation on 2026-11-20 (`docs/model-catalog-2026-11-20.yaml`):
+  - OpenAI: GPT-6.2 Astra replaces GPT-6 Astra, and GPT-6.2 Sol replaces GPT-6.1 Sol
+    as the default. GPT-6.1 Terra and GPT-6 Luna have no successors and stay.
+  - Anthropic: Claude Fable 5.2 replaces Fable 5.1. Opus 5.5, Sonnet 5.5 (default)
+    and Haiku 5.5 are unchanged.
+  - Google: Gemini 4 Carbon (flagship) and Gemini 4 Neon form the judgment tier,
+    Gemini 4 Hydrogen replaces Gemini 3.8 Flash as the default, and 3.5 Flash-Lite
+    stays. Gemini 4 Argon is removed: Google's own model comparison now covers only
+    Carbon, Neon, Hydrogen and Flash-Lite, and Neon's migration guide covers moving
+    from Argon.
+
+  The removed IDs no longer resolve: `gpt-6-astra`, `gpt-6.1-sol`, `claude-fable-5-1`,
+  `gemini/gemini-4-argon` and `gemini/gemini-3.8-flash`. Neon and Hydrogen add the
+  `xhigh` thinking level and default to `high`; Gemini 4 rejects `minimal`, and
+  GPT-6.2 Astra and Sol reject effort `none`.
+- **Dependency floors.** `google-genai>=3.6.1` (its `ThinkingLevel` gained `XHIGH` in
+  3.3.0) and `litellm>=1.110.2` (1.109.2 is the first stable release that sends
+  Gemini's `xhigh`). The LiteLLM floor is a stable release again: a release-candidate
+  floor lets pip install development builds, and CI on 2026-11-16 ran 1.111.0.dev4.
+
+### Fixed
+
+- **A capability LiteLLM lacks now refuses the request instead of erasing the
+  effort.** Since 3.8.1 every request for a catalog model has carried
+  `drop_params=False`, so that a reasoning level missing from LiteLLM's model map
+  raises an error. The LiteLLM backend also set the module-wide
+  `litellm.drop_params = True`, and LiteLLM combines the two with `or`, so the global
+  flag won: an unmapped level would have been dropped and the request sent at the
+  provider's default effort. Ragbot registers each catalog model's capabilities before
+  the call, and that has covered every model so far, so no request is known to have
+  lost its effort. The gap is real with this release: the model map bundled with
+  LiteLLM 1.110.2, which LiteLLM uses when it cannot download its current map, has no
+  row for GPT-6.2, Fable 5.2 or Gemini 4 Carbon and Neon. The backend no longer sets
+  the global flag; models without a contract, such as local Ollama models, carry
+  `drop_params=True` on each request instead.
+- **Local thinking documentation.** `CONFIGURE.md` and the sizing matrix still said
+  Gemma 4 takes no thinking parameter. Since 4.0.1 every Gemma 4 entry declares hybrid
+  thinking, and the 31B flagship defaults to `medium`.
+
 ## 4.0.1 — 2026-11-06
 
 Retrieval helpers work again with every provider, and reranking orders results

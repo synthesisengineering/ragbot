@@ -123,7 +123,7 @@ class TestLiteLLMKwargsBuilder:
         assert out["max_tokens"] == 512
         assert "max_completion_tokens" not in out
 
-    @pytest.mark.parametrize("model", ["openai/gpt-6.1-sol", "openai/a-future-model"])
+    @pytest.mark.parametrize("model", ["openai/gpt-6.2-sol", "openai/a-future-model"])
     def test_openai_takes_max_completion_tokens(self, model):
         out = self._build(model=model, max_tokens=512)
         assert out["max_completion_tokens"] == 512
@@ -150,8 +150,8 @@ class TestLiteLLMKwargsBuilder:
         assert "temperature" not in out
 
     def test_gemini_reasoning_effort_does_not_force_temperature(self):
-        out = self._build(model="gemini/gemini-4-argon", reasoning_effort="medium")
-        assert out["reasoning_effort"] == "medium"
+        out = self._build(model="gemini/gemini-4-hydrogen", reasoning_effort="xhigh")
+        assert out["reasoning_effort"] == "xhigh"
         assert "temperature" not in out
 
     def test_extra_kwargs_pass_through_and_override(self):
@@ -162,11 +162,11 @@ class TestLiteLLMKwargsBuilder:
 
     def test_openai_organization_from_env(self, monkeypatch):
         monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
-        assert self._build(model="openai/gpt-6.1-sol")["organization"] == "org-payer123"
+        assert self._build(model="openai/gpt-6.2-sol")["organization"] == "org-payer123"
 
     def test_openai_organization_absent_without_env(self, monkeypatch):
         monkeypatch.delenv("OPENAI_ORGANIZATION", raising=False)
-        assert "organization" not in self._build(model="openai/gpt-6.1-sol")
+        assert "organization" not in self._build(model="openai/gpt-6.2-sol")
 
     def test_openai_organization_ignored_for_other_providers(self, monkeypatch):
         monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
@@ -174,7 +174,7 @@ class TestLiteLLMKwargsBuilder:
 
     def test_openai_organization_extra_override_wins(self, monkeypatch):
         monkeypatch.setenv("OPENAI_ORGANIZATION", "org-payer123")
-        out = self._build(model="gpt-6.1-sol", extra={"organization": "org-explicit"})
+        out = self._build(model="gpt-6.2-sol", extra={"organization": "org-explicit"})
         assert out["organization"] == "org-explicit"
 
 

@@ -75,8 +75,7 @@ def _resolve_thinking_for_model(
     thinking_meta = info.get("thinking") or {}
     if not thinking_meta or thinking_meta.get("supported") is False:
         # Model doesn't advertise thinking — never send any thinking params,
-        # even if the user requested an effort level. (Caller can drop
-        # `litellm.drop_params=True` to surface errors instead.)
+        # even if the user requested an effort level.
         return {}
 
     if effort is None or effort == "auto":

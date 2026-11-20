@@ -1,9 +1,10 @@
 # engines.yaml — LLM engine configuration for Ragbot.
 #
-# Updated: November 6, 2026. Every provider carries only its current models;
-# superseded releases were removed rather than kept selectable. Identifiers,
-# limits and request contracts were verified against provider documentation
-# that day — see docs/model-catalog-2026-11-06.yaml for sources.
+# Updated: November 20, 2026. Every provider carries only its current models;
+# superseded releases were removed rather than kept selectable. Cloud
+# identifiers, limits and request contracts were verified against provider
+# documentation that day; the local lineup was last verified on November 6,
+# 2026. Sources for both: docs/model-catalog-2026-11-20.yaml.
 # First matching tier is the ordered role preference, not a user-model override.
 #
 # Field reference:
@@ -28,12 +29,15 @@ engines:
   - name: openai
     api_key_name: OPENAI_API_KEY
     models:
-      # Verified capability sources: docs/model-catalog-2026-11-06.yaml.
+      # Verified capability sources: docs/model-catalog-2026-11-20.yaml.
       # max_input_tokens is the documented input limit (922K), not the 1.05M
       # context window. Request limit 8192 and UI temperature cap 1 are product
-      # policy; null omits sampling.
-      - name: gpt-6-astra
-        display_name: GPT-6 Astra
+      # policy; null omits sampling. GPT-6.2 Astra and Sol reject effort `none`
+      # and take tools only through the Responses API; OpenAI states no default
+      # effort for either, so `medium` is product policy (its latest-model guide
+      # says to start there).
+      - name: gpt-6.2-astra
+        display_name: GPT-6.2 Astra
         tier: judgment
         is_flagship: true
         supports_system_role: true
@@ -56,8 +60,8 @@ engines:
           token_limit: max_completion_tokens
           sampling: non_reasoning_only
           tool_calling: responses_only
-      - name: gpt-6.1-sol
-        display_name: GPT-6.1 Sol
+      - name: gpt-6.2-sol
+        display_name: GPT-6.2 Sol
         tier: routine
         supports_system_role: true
         max_temperature: 1
@@ -127,17 +131,17 @@ engines:
           token_limit: max_completion_tokens
           sampling: non_reasoning_only
           tool_calling: non_reasoning_only
-    default_model: gpt-6.1-sol
+    default_model: gpt-6.2-sol
 
   - name: anthropic
     api_key_name: ANTHROPIC_API_KEY
     models:
-      # Verified capability sources: docs/model-catalog-2026-11-06.yaml.
+      # Verified capability sources: docs/model-catalog-2026-11-20.yaml.
       # Every model takes effort through output_config with adaptive thinking;
       # API version 2026-10-21 removes temperature, top_p and top_k for all of
       # them. always_on marks models that reject disabled thinking.
-      - name: claude-fable-5-1
-        display_name: Claude Fable 5.1
+      - name: claude-fable-5-2
+        display_name: Claude Fable 5.2
         tier: judgment
         is_flagship: true
         supports_system_role: true
@@ -238,11 +242,17 @@ engines:
   - name: google
     api_key_name: GOOGLE_API_KEY
     models:
-      # Verified capability sources: docs/model-catalog-2026-11-06.yaml.
-      # Sampling parameters are deprecated or ignored on all three; thinking is
-      # set by level, never by budget.
-      - name: gemini/gemini-4-argon
-        display_name: Gemini 4 Argon
+      # Verified capability sources: docs/model-catalog-2026-11-20.yaml.
+      # Google's own comparison covers exactly these four: Carbon (strongest
+      # reasoning), Neon (between Hydrogen and Carbon), Hydrogen (the upgrade
+      # from 3.8 Flash) and 3.5 Flash-Lite (fastest, lowest cost). Thinking is
+      # set by level, never by budget; Gemini 4 rejects `minimal`. Gemini 4
+      # ignores in-range sampling values and rejects out-of-range ones, and 3.5
+      # Flash-Lite ignores them; Ragbot sends none. Gemini 4's 1,048,576-token
+      # window is shared by input and output, and 65,536 is its synchronous
+      # output default and cap.
+      - name: gemini/gemini-4-carbon
+        display_name: Gemini 4 Carbon
         tier: judgment
         is_flagship: true
         supports_system_role: true
@@ -262,8 +272,29 @@ engines:
         request_parameters:
           effort: thinking_level
           sampling: unsupported
-      - name: gemini/gemini-3.8-flash
-        display_name: Gemini 3.8 Flash
+      - name: gemini/gemini-4-neon
+        display_name: Gemini 4 Neon
+        tier: judgment
+        supports_system_role: true
+        max_temperature: 1
+        temperature: null
+        max_input_tokens: 1048576
+        max_output_tokens: 65536
+        default_max_tokens: 8192
+        thinking:
+          supported: true
+          strict: true
+          modes:
+          - low
+          - medium
+          - high
+          - xhigh
+          default: high
+        request_parameters:
+          effort: thinking_level
+          sampling: unsupported
+      - name: gemini/gemini-4-hydrogen
+        display_name: Gemini 4 Hydrogen
         tier: routine
         supports_system_role: true
         max_temperature: 1
@@ -278,7 +309,8 @@ engines:
           - low
           - medium
           - high
-          default: medium
+          - xhigh
+          default: high
         request_parameters:
           effort: thinking_level
           sampling: unsupported
@@ -303,7 +335,7 @@ engines:
         request_parameters:
           effort: thinking_level
           sampling: unsupported
-    default_model: gemini/gemini-3.8-flash
+    default_model: gemini/gemini-4-hydrogen
 
   - name: ollama
     # Local Ollama server (no API key required; uses MLX backend on Apple Silicon).
@@ -317,10 +349,11 @@ engines:
     # MacBook Pro, and Mac Studio.
     models:
       # Verified 2026-11-06 against the Ollama library tag pages and the model
-      # cards; sources in docs/model-catalog-2026-11-06.yaml. Only models with a
+      # cards; sources in docs/model-catalog-2026-11-20.yaml. Only models with a
       # local Ollama tag belong here: `:cloud` tags run on Ollama's servers, and
       # routing treats this provider as local (synthesis_engine.config.is_local_model_id).
-      # Gemma 4 (2026-03-31) is the current Gemma generation.
+      # Gemma 4 (2026-03-31) is the current Gemma generation: Google's release
+      # page lists no newer chat model as of 2026-11-20.
       - name: gemma4:31b
         display_name: Gemma 4 31B
         tier: judgment

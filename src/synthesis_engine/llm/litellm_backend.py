@@ -140,6 +140,10 @@ def _build_completion_kwargs(req: LLMRequest) -> Dict[str, Any]:
         # A dependency capability gap must reject the request, never erase effort.
         kwargs["drop_params"] = False
         register_litellm_capabilities(req.model)
+    else:
+        # Models without a verified contract (local Ollama models, unlisted
+        # IDs) keep LiteLLM's tolerance for parameters it does not map.
+        kwargs.setdefault("drop_params", True)
     return kwargs
 
 
@@ -155,9 +159,10 @@ class LiteLLMBackend(LLMBackend):
             ) from exc
 
         self._litellm = litellm
-        # Drop unsupported params at the LiteLLM layer; we still build kwargs
-        # carefully ourselves above to avoid round-tripping wrong values.
-        litellm.drop_params = True
+        # drop_params is set on each request by _build_completion_kwargs. Never
+        # set the module-wide flag: LiteLLM ORs it with the per-call value, so a
+        # global True overrides a contract request's False and silently erases
+        # an effort its model map lacks instead of refusing the request.
         # LiteLLM prints a "Provider List" banner to stdout whenever one of its
         # internal lookups misses, including lookups it catches itself (a
         # reasoning setting for an Ollama model is one). Errors that reach us

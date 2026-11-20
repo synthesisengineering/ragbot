@@ -36,7 +36,7 @@ anthropic>=2.6.0
 # Call sites verified against openai 3.46.0 on 2026-11-06: `openai.OpenAI()`
 # with `organization`, `chat.completions.create` including streaming, and the
 # module-level `openai.api_key`.
-openai>=3.46.0,<4
+openai>=3.52.0,<4
 # google-genai is the current Google SDK. The end-of-life google-generativeai
 # package was dropped on 2026-11-06: nothing in Ragbot imported it and no
 # other dependency required it, but it pinned google-ai-generativelanguage

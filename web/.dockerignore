@@ -1,0 +1,5 @@
+# The image installs its own packages in the deps stage. A host install
+# (built for macOS, and possibly from an older lockfile) or a host build cache
+# must never be copied over them.
+node_modules
+.next

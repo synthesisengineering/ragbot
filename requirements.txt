@@ -88,7 +88,7 @@ pgvector>=0.5.1                 # pgvector type adapter for psycopg
 fastapi>=0.162.0
 uvicorn[standard]>=0.54.0
 sse-starlette>=3.6.0
-pydantic>=2.14.3
+pydantic>=2.14.4
 
 # --- Model Context Protocol ----------------------------------------------
 # The official Python SDK powers synthesis_engine.mcp (client, primitives,
